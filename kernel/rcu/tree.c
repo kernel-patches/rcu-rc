@@ -1692,6 +1692,7 @@ static bool rcu_start_this_gp(struct rcu_node *rnp, struct rcu_data *rdp,
 	}
 	trace_rcu_this_gp(rnp_root, rdp, c, TPS("Startedroot"));
 	WRITE_ONCE(rsp->gp_flags, rsp->gp_flags | RCU_GP_FLAG_INIT);
+	rsp->gp_req_activity = jiffies;
 	if (!rsp->gp_kthread) {
 		trace_rcu_this_gp(rnp_root, rdp, c, TPS("NoGPkthread"));
 		goto unlock_out;
@@ -2124,6 +2125,7 @@ static void rcu_gp_cleanup(struct rcu_state *rsp)
 	/* Advance CBs to reduce false positives below. */
 	if (!rcu_accelerate_cbs(rsp, rnp, rdp) && needgp) {
 		WRITE_ONCE(rsp->gp_flags, RCU_GP_FLAG_INIT);
+		rsp->gp_req_activity = jiffies;
 		trace_rcu_grace_period(rsp->name, READ_ONCE(rsp->gpnum),
 				       TPS("newreq"));
 	}
@@ -2756,6 +2758,60 @@ static void force_quiescent_state(struct rcu_state *rsp)
 }
 
 /*
+ * This function checks for grace-period requests that fail to motivate
+ * RCU to come out of its idle mode.
+ */
+static void
+rcu_check_gp_start_stall(struct rcu_state *rsp, struct rcu_node *rnp,
+			 struct rcu_data *rdp)
+{
+	unsigned long flags;
+	struct rcu_node *rnp_root = rcu_get_root(rsp);
+	static atomic_t warned = ATOMIC_INIT(0);
+
+	if (rcu_gp_in_progress(rsp) ||
+	    !need_any_future_gp(rcu_get_root(rsp)) ||
+	    time_before(jiffies, READ_ONCE(rsp->gp_req_activity) + HZ) ||
+	    time_before(jiffies, READ_ONCE(rsp->gp_activity) + HZ) ||
+	    atomic_read(&warned))
+		return;
+
+	raw_spin_lock_irqsave_rcu_node(rnp, flags);
+	if (rcu_gp_in_progress(rsp) ||
+	    !need_any_future_gp(rcu_get_root(rsp)) ||
+	    time_before(jiffies, READ_ONCE(rsp->gp_req_activity) + HZ) ||
+	    time_before(jiffies, READ_ONCE(rsp->gp_activity) + HZ) ||
+	    atomic_read(&warned)) {
+		raw_spin_unlock_irqrestore_rcu_node(rnp, flags);
+		return;
+	}
+	/* Hold onto the leaf lock to make others see warned=1. */
+
+	raw_spin_lock_irqsave_rcu_node(rnp_root, flags);
+	if (rcu_gp_in_progress(rsp) ||
+	    !need_any_future_gp(rcu_get_root(rsp)) ||
+	    time_before(jiffies, rsp->gp_req_activity + HZ) ||
+	    time_before(jiffies, rsp->gp_activity + HZ) ||
+	    atomic_xchg(&warned, 1)) {
+		raw_spin_unlock_irqrestore_rcu_node(rnp_root, flags);
+		raw_spin_unlock_irqrestore_rcu_node(rnp, flags);
+		return;
+	}
+	pr_alert("%s: g%lu %d%d%d%d gar:%lu ga:%lu f%#x\n",
+		 __func__, READ_ONCE(rsp->gpnum),
+		 need_future_gp_element(rcu_get_root(rsp), 0),
+		 need_future_gp_element(rcu_get_root(rsp), 1),
+		 need_future_gp_element(rcu_get_root(rsp), 2),
+		 need_future_gp_element(rcu_get_root(rsp), 3),
+		 jiffies - rsp->gp_req_activity,
+		 jiffies - rsp->gp_activity,
+		 rsp->gp_flags);
+	WARN_ON(1);
+	raw_spin_unlock_irqrestore_rcu_node(rnp_root, flags);
+	raw_spin_unlock_irqrestore_rcu_node(rnp, flags);
+}
+
+/*
  * This does the RCU core processing work for the specified rcu_state
  * and rcu_data structures.  This may be called only from the CPU to
  * whom the rdp belongs.
@@ -2766,7 +2822,7 @@ __rcu_process_callbacks(struct rcu_state *rsp)
 	unsigned long flags;
 	bool needwake;
 	struct rcu_data *rdp = raw_cpu_ptr(rsp->rda);
-	struct rcu_node *rnp;
+	struct rcu_node *rnp = rdp->mynode;
 
 	WARN_ON_ONCE(!rdp->beenonline);
 
@@ -2780,7 +2836,6 @@ __rcu_process_callbacks(struct rcu_state *rsp)
 		if (rcu_segcblist_restempty(&rdp->cblist, RCU_NEXT_READY_TAIL)) {
 			local_irq_restore(flags);
 		} else {
-			rnp = rdp->mynode;
 			raw_spin_lock_rcu_node(rnp); /* irqs disabled. */
 			needwake = rcu_accelerate_cbs(rsp, rnp, rdp);
 			raw_spin_unlock_irqrestore_rcu_node(rnp, flags);
@@ -2788,6 +2843,8 @@ __rcu_process_callbacks(struct rcu_state *rsp)
 				rcu_gp_kthread_wake(rsp);
 		}
 	}
+
+	rcu_check_gp_start_stall(rsp, rnp, rdp);
 
 	/* If there are callbacks ready, invoke them. */
 	if (rcu_segcblist_ready_cbs(&rdp->cblist))
