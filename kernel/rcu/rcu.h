@@ -285,7 +285,7 @@ static inline void rcu_init_levelspread(int *levelspread, const int *levelcnt)
  */
 #define rcu_for_each_node_breadth_first(rsp, rnp) \
 	for ((rnp) = &(rsp)->node[0]; \
-	     rcu_is_last_leaf_node(rsp, rnp); (rnp)++)
+	     (rnp) < &(rsp)->node[rcu_num_nodes]; (rnp)++)
 
 /*
  * Do a breadth-first scan of the non-leaf rcu_node structures for the
@@ -303,7 +303,7 @@ static inline void rcu_init_levelspread(int *levelspread, const int *levelcnt)
  */
 #define rcu_for_each_leaf_node(rsp, rnp) \
 	for ((rnp) = rcu_first_leaf_node(rsp); \
-	     rcu_is_last_leaf_node(rsp, rnp); (rnp)++)
+	     (rnp) < &(rsp)->node[rcu_num_nodes]; (rnp)++)
 
 /*
  * Iterate over all possible CPUs in a leaf RCU node.
