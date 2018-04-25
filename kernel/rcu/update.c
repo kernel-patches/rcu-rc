@@ -212,6 +212,10 @@ void rcu_test_sync_prims(void)
 
 #if !defined(CONFIG_TINY_RCU) || defined(CONFIG_SRCU)
 
+void __weak __init srcu_boot_cleanup(void)
+{
+}
+
 /*
  * Switch to run-time mode once RCU has fully initialized.
  */
@@ -220,6 +224,7 @@ static int __init rcu_set_runtime_mode(void)
 	rcu_test_sync_prims();
 	rcu_scheduler_active = RCU_SCHEDULER_RUNNING;
 	rcu_test_sync_prims();
+	srcu_boot_cleanup();
 	return 0;
 }
 core_initcall(rcu_set_runtime_mode);

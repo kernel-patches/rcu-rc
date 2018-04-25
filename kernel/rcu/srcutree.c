@@ -80,6 +80,9 @@ do {									\
 #define spin_unlock_irqrestore_rcu_node(p, flags)			\
 	spin_unlock_irqrestore(&ACCESS_PRIVATE(p, lock), flags)	\
 
+LIST_HEAD(srcu_boot_list);  /* List and lock for early boot call_srcu(). */
+DEFINE_SPINLOCK(srcu_boot_lock);
+
 /*
  * Initialize SRCU combining tree.  Note that statically allocated
  * srcu_struct structures might already have srcu_read_lock() and
@@ -180,8 +183,10 @@ static int init_srcu_struct_fields(struct srcu_struct *sp, bool is_static)
 	mutex_init(&sp->srcu_barrier_mutex);
 	atomic_set(&sp->srcu_barrier_cpu_cnt, 0);
 	INIT_DELAYED_WORK(&sp->work, process_srcu);
-	if (!is_static)
+	if (!is_static) {
 		sp->sda = alloc_percpu(struct srcu_data);
+		sp->srcu_boot.next = NULL; /* No early boot call_srcu()! */
+	}
 	init_srcu_struct_nodes(sp, is_static);
 	sp->srcu_gp_seq_needed_exp = 0;
 	sp->srcu_last_gp_end = ktime_get_mono_fast_ns();
@@ -691,6 +696,21 @@ static void srcu_funnel_gp_start(struct srcu_struct *sp, struct srcu_data *sdp,
 		sp->srcu_gp_seq_needed_exp = s;
 
 	/* If grace period not already done and none in progress, start it. */
+	if (list_empty(&sp->srcu_boot) &&
+	    rcu_scheduler_active != RCU_SCHEDULER_RUNNING) {
+		spin_unlock_irqrestore_rcu_node(sp, flags);
+		spin_lock_irqsave(&srcu_boot_lock, flags);
+		if (list_empty(&sp->srcu_boot) &&
+		    rcu_scheduler_active != RCU_SCHEDULER_RUNNING) {
+			/* No early boot call_srcu() on dynamic srcu_struct. */
+			WARN_ON(sp->srcu_boot.next == NULL);
+			list_add(&sp->srcu_boot, &srcu_boot_list);
+			spin_unlock_irqrestore(&srcu_boot_lock, flags);
+			return;
+		}
+		spin_unlock_irqrestore(&srcu_boot_lock, flags);
+		spin_lock_irqsave_rcu_node(sp, flags);
+	}
 	if (!rcu_seq_done(&sp->srcu_gp_seq, s) &&
 	    rcu_seq_state(sp->srcu_gp_seq) == SRCU_STATE_IDLE) {
 		WARN_ON_ONCE(ULONG_CMP_GE(sp->srcu_gp_seq, sp->srcu_gp_seq_needed));
@@ -823,17 +843,17 @@ static void srcu_leak_callback(struct rcu_head *rhp)
  * more than one CPU, this means that when "func()" is invoked, each CPU
  * is guaranteed to have executed a full memory barrier since the end of
  * its last corresponding SRCU read-side critical section whose beginning
- * preceded the call to call_rcu().  It also means that each CPU executing
+ * preceded the call to call_srcu().  It also means that each CPU executing
  * an SRCU read-side critical section that continues beyond the start of
- * "func()" must have executed a memory barrier after the call_rcu()
+ * "func()" must have executed a memory barrier after the call_srcu()
  * but before the beginning of that SRCU read-side critical section.
  * Note that these guarantees include CPUs that are offline, idle, or
  * executing in user mode, as well as CPUs that are executing in the kernel.
  *
- * Furthermore, if CPU A invoked call_rcu() and CPU B invoked the
+ * Furthermore, if CPU A invoked call_srcu() and CPU B invoked the
  * resulting SRCU callback function "func()", then both CPU A and CPU
  * B are guaranteed to execute a full memory barrier during the time
- * interval between the call to call_rcu() and the invocation of "func()".
+ * interval between the call to call_srcu() and the invocation of "func()".
  * This guarantee applies even if CPU A and CPU B are the same CPU (but
  * again only if the system has more than one CPU).
  *
@@ -1301,3 +1321,68 @@ static int __init srcu_bootup_announce(void)
 	return 0;
 }
 early_initcall(srcu_bootup_announce);
+
+/*
+ * Support for early boot call_srcu().  The trick is to create a list
+ * of all srcu_struct structures that were subjected to an early boot
+ * call_srcu(), and later in boot post a callback to each structure in
+ * the list to kick off the needed grace periods.
+ *
+ * Note that synchronize_srcu() and synchronize_srcu_expedited()
+ * remain unsupported during the mid-boot dead zone, which starts after
+ * the scheduler is running multiple processes and ends during the
+ * core_initcall() timeframe.
+ */
+
+/*
+ * Post an SRCU callback to each srcu_struct structure that was
+ * subjected to call_srcu() during early boot.
+ */
+void __init srcu_boot_cleanup(void)
+{
+	unsigned long flags;
+	struct srcu_struct *sp;
+
+	spin_lock_irqsave(&srcu_boot_lock, flags);
+	if (list_empty(&srcu_boot_list)) {
+		spin_unlock_irqrestore(&srcu_boot_lock, flags);
+		return;  /* No early boot call_srcu(), nothing to do. */
+	}
+	list_for_each_entry(sp, &srcu_boot_list, srcu_boot)
+		srcu_reschedule(sp, 0);
+	spin_unlock_irqrestore(&srcu_boot_lock, flags);
+}
+
+#ifdef CONFIG_PROVE_RCU
+
+static bool srcu_self_test;
+module_param(srcu_self_test, bool, 0444);
+static bool srcu_self_test_happened;
+DEFINE_SRCU(srcu_self_test_struct);
+
+static void srcu_test_callback(struct rcu_head *rhp)
+{
+	srcu_self_test_happened = true;
+	pr_info("SRCU test callback executed\n");
+}
+
+void __init srcu_early_boot_test(void)
+{
+	static struct rcu_head rh;
+
+	if (!srcu_self_test)
+		return;
+	call_srcu(&srcu_self_test_struct, &rh, srcu_test_callback);
+	pr_info("SRCU test callback registered\n");
+}
+
+static int srcu_verify_early_boot_test(void)
+{
+	if (!srcu_self_test)
+		return 0;
+	WARN_ON(!srcu_self_test_happened);
+	return 0;
+}
+late_initcall(srcu_verify_early_boot_test);
+
+#endif /* #ifdef CONFIG_PROVE_RCU */

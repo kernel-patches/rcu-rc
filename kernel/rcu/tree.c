@@ -4129,6 +4129,10 @@ static void __init rcu_dump_rcu_node_tree(struct rcu_state *rsp)
 	pr_cont("\n");
 }
 
+void __weak __init srcu_early_boot_test(void)
+{
+}
+
 struct workqueue_struct *rcu_gp_wq;
 struct workqueue_struct *rcu_par_gp_wq;
 
@@ -4137,6 +4141,7 @@ void __init rcu_init(void)
 	int cpu;
 
 	rcu_early_boot_tests();
+	srcu_early_boot_test();
 
 	rcu_bootup_announce();
 	rcu_init_geometry();
