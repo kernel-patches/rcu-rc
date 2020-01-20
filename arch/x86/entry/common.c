@@ -57,6 +57,11 @@ static inline void enter_from_user_mode(void) {}
  */
 static __always_inline void syscall_entry_fixups(void)
 {
+	/*
+	 * Usermode is traced as interrupts enabled, but the syscall entry
+	 * mechanisms disable interrupts. Tell the tracer.
+	 */
+	trace_hardirqs_off();
 	enter_from_user_mode();
 	local_irq_enable();
 }
