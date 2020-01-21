@@ -333,6 +333,7 @@ __visible notrace void do_syscall_64(unsigned long nr, struct pt_regs *regs)
 {
 	syscall_entry_fixups();
 	do_syscall_64_irqs_on(nr, regs);
+	trace_hardirqs_on();
 }
 NOKPROBE_SYMBOL(do_syscall_64);
 #endif
@@ -389,6 +390,7 @@ __visible notrace void do_int80_syscall_32(struct pt_regs *regs)
 {
 	syscall_entry_fixups();
 	do_syscall_32_irqs_on(regs);
+	trace_hardirqs_on();
 }
 NOKPROBE_SYMBOL(do_int80_syscall_32);
 
@@ -468,8 +470,12 @@ static __always_inline long do_fast_syscall_32_irqs_on(struct pt_regs *regs)
 /* Returns 0 to return using IRET or 1 to return using SYSEXIT/SYSRETL. */
 __visible notrace long do_fast_syscall_32(struct pt_regs *regs)
 {
+	long ret;
+
 	syscall_entry_fixups();
-	return do_fast_syscall_32_irqs_on(regs);
+	ret = do_fast_syscall_32_irqs_on(regs);
+	trace_hardirqs_on();
+	return ret;
 }
 NOKPROBE_SYMBOL(do_fast_syscall_32);
 
