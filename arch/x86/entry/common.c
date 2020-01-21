@@ -244,6 +244,7 @@ static inline void __prepare_exit_to_usermode(struct pt_regs *regs)
 __visible inline notrace void prepare_exit_to_usermode(struct pt_regs *regs)
 {
 	__prepare_exit_to_usermode(regs);
+	trace_hardirqs_on();
 }
 NOKPROBE_SYMBOL(prepare_exit_to_usermode);
 
