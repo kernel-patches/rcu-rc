@@ -299,6 +299,8 @@ __visible inline notrace void syscall_return_slowpath(struct pt_regs *regs)
 
 	local_irq_disable();
 	__prepare_exit_to_usermode(regs);
+	/* Return to user space enables interrupts */
+	trace_hardirqs_on();
 }
 NOKPROBE_SYMBOL(syscall_return_slowpath);
 

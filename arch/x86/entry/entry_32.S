@@ -812,7 +812,7 @@ SYM_CODE_START(ret_from_fork)
 	movl    %esp, %eax
 	call    syscall_return_slowpath
 	STACKLEAK_ERASE
-	jmp     restore_all
+	jmp     restore_all_switch_stack
 
 	/* kernel thread */
 1:	movl	%edi, %eax
@@ -1077,6 +1077,7 @@ SYM_FUNC_START(entry_INT80_32)
 
 restore_all:
 	TRACE_IRQS_IRET
+restore_all_switch_stack:
 	SWITCH_TO_ENTRY_STACK
 	CHECK_AND_APPLY_ESPFIX
 .Lrestore_nocheck:
