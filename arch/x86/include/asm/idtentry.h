@@ -7,14 +7,31 @@
 
 #ifndef __ASSEMBLY__
 
+#ifdef CONFIG_CONTEXT_TRACKING
+static __always_inline void enter_from_user_context(void)
+{
+	CT_WARN_ON(ct_state() != CONTEXT_USER);
+	user_exit_irqoff();
+}
+#else
+static __always_inline void enter_from_user_context(void) { }
+#endif
+
 /**
  * idtentry_enter - Handle state tracking on idtentry
  * @regs:	Pointer to pt_regs of interrupted context
  *
- * Place holder for now.
+ * Invokes:
+ *  - The hardirq tracer to keep the state consistent as low level ASM
+ *    entry disabled interrupts.
+ *
+ *  - Context tracking if the exception hit user mode
  */
 static __always_inline void idtentry_enter(struct pt_regs *regs)
 {
+	trace_hardirqs_off();
+	if (user_mode(regs))
+		enter_from_user_context();
 }
 
 /**

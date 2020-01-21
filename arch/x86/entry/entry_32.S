@@ -1452,7 +1452,6 @@ SYM_CODE_START_LOCAL_NOALIGN(common_exception)
 	movl	PT_ORIG_EAX(%esp), %edx		# get the error code
 	movl	$-1, PT_ORIG_EAX(%esp)		# no syscall to restart
 
-	TRACE_IRQS_OFF
 	movl	%esp, %eax			# pt_regs pointer
 	CALL_NOSPEC %edi
 	jmp	ret_from_exception
