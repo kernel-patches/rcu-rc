@@ -1500,20 +1500,26 @@ trace_page_fault_entries(struct pt_regs *regs, unsigned long error_code,
 		trace_page_fault_kernel(address, regs, error_code);
 }
 
-dotraplinkage void
-do_page_fault(struct pt_regs *regs, unsigned long hw_error_code,
-		unsigned long address)
+/* Invoked from do_aync_page_fault() */
+void notrace native_do_page_fault(struct pt_regs *regs,
+				  unsigned long error_code,
+				  unsigned long address)
 {
 	prefetchw(&current->mm->mmap_sem);
-	trace_page_fault_entries(regs, hw_error_code, address);
+	trace_page_fault_entries(regs, error_code, address);
 
 	if (unlikely(kmmio_fault(regs, address)))
 		return;
 
 	/* Was the fault on kernel-controlled part of the address space? */
 	if (unlikely(fault_in_kernel_space(address)))
-		do_kern_addr_fault(regs, hw_error_code, address);
+		do_kern_addr_fault(regs, error_code, address);
 	else
-		do_user_addr_fault(regs, hw_error_code, address);
+		do_user_addr_fault(regs, error_code, address);
 }
-NOKPROBE_SYMBOL(do_page_fault);
+NOKPROBE_SYMBOL(native_do_page_fault);
+
+DEFINE_IDTENTRY_CR2(exc_page_fault)
+{
+	native_do_page_fault(regs, error_code, address);
+}

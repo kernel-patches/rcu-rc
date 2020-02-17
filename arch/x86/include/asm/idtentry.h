@@ -399,6 +399,12 @@ DECLARE_IDTENTRY_ERRORCODE(X86_TRAP_SS,	exc_stack_segment);
 DECLARE_IDTENTRY_ERRORCODE(X86_TRAP_GP,	exc_general_protection);
 DECLARE_IDTENTRY_ERRORCODE(X86_TRAP_AC,	exc_alignment_check);
 
+/* Page fault entry points */
+DECLARE_IDTENTRY_CR2(X86_TRAP_PF,	exc_page_fault);
+#ifdef CONFIG_KVM_GUEST
+DECLARE_IDTENTRY_CR2(X86_TRAP_PF,	exc_async_page_fault);
+#endif
+
 #ifdef CONFIG_X86_MCE
 /* Machine check */
 DECLARE_IDTENTRY_MCE(X86_TRAP_MC,	exc_machine_check);

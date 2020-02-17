@@ -242,12 +242,11 @@ u32 kvm_read_and_reset_pf_reason(void)
 EXPORT_SYMBOL_GPL(kvm_read_and_reset_pf_reason);
 NOKPROBE_SYMBOL(kvm_read_and_reset_pf_reason);
 
-dotraplinkage void
-do_async_page_fault(struct pt_regs *regs, unsigned long error_code, unsigned long address)
+DEFINE_IDTENTRY_CR2(exc_async_page_fault)
 {
 	switch (kvm_read_and_reset_pf_reason()) {
 	default:
-		do_page_fault(regs, error_code, address);
+		native_do_page_fault(regs, error_code, address);
 		break;
 	case KVM_PV_REASON_PAGE_NOT_PRESENT:
 		/* page is swapped out by the host. */
@@ -260,7 +259,6 @@ do_async_page_fault(struct pt_regs *regs, unsigned long error_code, unsigned lon
 		break;
 	}
 }
-NOKPROBE_SYMBOL(do_async_page_fault);
 
 static void __init paravirt_ops_setup(void)
 {
@@ -572,7 +570,7 @@ static int kvm_cpu_down_prepare(unsigned int cpu)
 
 static void __init kvm_apf_trap_init(void)
 {
-	update_intr_gate(X86_TRAP_PF, async_page_fault);
+	update_intr_gate(X86_TRAP_PF, asm_exc_async_page_fault);
 }
 
 static DEFINE_PER_CPU(cpumask_var_t, __pv_tlb_mask);
