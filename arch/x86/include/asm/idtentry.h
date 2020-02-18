@@ -76,4 +76,7 @@ static __always_inline void __##func(struct pt_regs *regs)
 
 #endif /* __ASSEMBLY__ */
 
+/* Simple exception entries: */
+DECLARE_IDTENTRY(X86_TRAP_DE,		exc_divide_error);
+
 #endif
