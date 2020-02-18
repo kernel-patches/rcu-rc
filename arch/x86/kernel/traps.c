@@ -214,7 +214,7 @@ do_trap_no_signal(struct task_struct *tsk, int trapnr, const char *str,
 	 * process no chance to handle the signal and notice the
 	 * kernel fault information, so that won't result in polluting
 	 * the information about previously queued, but not yet
-	 * delivered, faults.  See also do_general_protection below.
+	 * delivered, faults.  See also exc_general_protection below.
 	 */
 	tsk->thread.error_code = error_code;
 	tsk->thread.trap_nr = trapnr;
@@ -410,7 +410,7 @@ dotraplinkage void do_double_fault(struct pt_regs *regs, long error_code, unsign
 		 * which is what the stub expects, given that the faulting
 		 * RIP will be the IRET instruction.
 		 */
-		regs->ip = (unsigned long)general_protection;
+		regs->ip = (unsigned long)asm_exc_general_protection;
 		regs->sp = (unsigned long)&gpregs->orig_ax;
 
 		return;
@@ -529,7 +529,7 @@ static enum kernel_gp_hint get_kernel_gp_address(struct pt_regs *regs,
 
 #define GPFSTR "general protection fault"
 
-dotraplinkage void do_general_protection(struct pt_regs *regs, long error_code)
+DEFINE_IDTENTRY_ERRORCODE(exc_general_protection)
 {
 	char desc[sizeof(GPFSTR) + 50 + 2*sizeof(unsigned long) + 1] = GPFSTR;
 	enum kernel_gp_hint hint = GP_NO_HINT;
@@ -603,7 +603,6 @@ dotraplinkage void do_general_protection(struct pt_regs *regs, long error_code)
 	die_addr(desc, regs, error_code, gp_addr);
 
 }
-NOKPROBE_SYMBOL(do_general_protection);
 
 DEFINE_IDTENTRY(exc_int3)
 {

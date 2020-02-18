@@ -732,7 +732,7 @@
 .macro idtentry_push_func vector cfunc
 	.if \vector == X86_TRAP_XF
 		/* AMD 486 bug: invd from userspace calls exception 19 instead of #GP */
-		ALTERNATIVE "pushl	$do_general_protection",	\
+		ALTERNATIVE "pushl	$exc_general_protection",	\
 			    "pushl	$do_simd_coprocessor_error",	\
 			    X86_FEATURE_XMM
 	.else
@@ -1651,12 +1651,6 @@ SYM_CODE_START(nmi)
 	jmp	.Lirq_return
 #endif
 SYM_CODE_END(nmi)
-
-SYM_CODE_START(general_protection)
-	ASM_CLAC
-	pushl	$do_general_protection
-	jmp	common_exception
-SYM_CODE_END(general_protection)
 
 #ifdef CONFIG_KVM_GUEST
 SYM_CODE_START(async_page_fault)
