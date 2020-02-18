@@ -37,10 +37,11 @@ static __always_inline void idtentry_enter(struct pt_regs *regs)
 /**
  * idtentry_exit - Prepare returning to low level ASM code
  *
- * Place holder for now.
+ * Disables interrupts before returning
  */
 static __always_inline void idtentry_exit(struct pt_regs *regs)
 {
+	local_irq_disable();
 }
 
 /**
