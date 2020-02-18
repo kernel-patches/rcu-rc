@@ -320,15 +320,11 @@ DEFINE_IDTENTRY_ERRORCODE(exc_stack_segment)
 		      0, NULL);
 }
 
-#define IP ((void __user *)uprobe_get_trap_addr(regs))
-#define DO_ERROR(trapnr, signr, sicode, addr, str, name)		   \
-dotraplinkage void do_##name(struct pt_regs *regs, long error_code)	   \
-{									   \
-	do_error_trap(regs, error_code, str, trapnr, signr, sicode, addr); \
+DEFINE_IDTENTRY_ERRORCODE(exc_alignment_check)
+{
+	do_error_trap(regs, error_code, "alignement check", X86_TRAP_AC,
+		      SIGBUS, BUS_ADRALN, NULL);
 }
-
-DO_ERROR(X86_TRAP_AC,     SIGBUS,  BUS_ADRALN, NULL, "alignment check",     alignment_check)
-#undef IP
 
 #ifdef CONFIG_VMAP_STACK
 __visible void __noreturn handle_stack_overflow(const char *message,
