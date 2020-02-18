@@ -230,12 +230,10 @@ u64 arch_irq_stat(void)
  * SMP cross-CPU interrupts have their own specific
  * handlers).
  */
-__visible void __irq_entry do_IRQ(struct pt_regs *regs)
+__visible void __irq_entry do_IRQ(struct pt_regs *regs, unsigned long vector)
 {
 	struct pt_regs *old_regs = set_irq_regs(regs);
 	struct irq_desc * desc;
-	/* high bit used in ret_from_ code  */
-	unsigned vector = ~regs->orig_ax;
 
 	entering_irq();
 
@@ -252,7 +250,7 @@ __visible void __irq_entry do_IRQ(struct pt_regs *regs)
 		ack_APIC_irq();
 
 		if (desc == VECTOR_UNUSED) {
-			pr_emerg_ratelimited("%s: %d.%d No irq handler for vector\n",
+			pr_emerg_ratelimited("%s: %d.%lu No irq handler for vector\n",
 					     __func__, smp_processor_id(),
 					     vector);
 		} else {
