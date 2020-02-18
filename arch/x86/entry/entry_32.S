@@ -44,6 +44,7 @@
 #include <asm/asm.h>
 #include <asm/smap.h>
 #include <asm/frame.h>
+#include <asm/trapnr.h>
 #include <asm/nospec-branch.h>
 
 #include "calling.h"
@@ -726,6 +727,47 @@
 
 .Lend_\@:
 .endm
+
+#ifdef CONFIG_X86_INVD_BUG
+.macro idtentry_push_func vector cfunc
+	.if \vector == X86_TRAP_XF
+		/* AMD 486 bug: invd from userspace calls exception 19 instead of #GP */
+		ALTERNATIVE "pushl	$do_general_protection",	\
+			    "pushl	$do_simd_coprocessor_error",	\
+			    X86_FEATURE_XMM
+	.else
+		pushl $\cfunc
+	.endif
+.endm
+#else
+.macro idtentry_push_func vector cfunc
+	pushl $\cfunc
+.endm
+#endif
+
+/**
+ * idtentry - Macro to generate entry stubs for simple IDT entries
+ * @vector:		Vector number
+ * @asmsym:		ASM symbol for the entry point
+ * @cfunc:		C function to be called
+ * @has_error_code:	Hardware pushed error code on stack
+ */
+.macro idtentry vector asmsym cfunc has_error_code:req
+SYM_CODE_START(\asmsym)
+	ASM_CLAC
+	cld
+
+	.if \has_error_code == 0
+		pushl	$0		/* Clear the error code */
+	.endif
+
+	/* Push the C-function address into the GS slot */
+	idtentry_push_func \vector \cfunc
+	/* Invoke the common exception entry */
+	jmp	common_exception
+SYM_CODE_END(\asmsym)
+.endm
+
 /*
  * %eax: prev task
  * %edx: next task
