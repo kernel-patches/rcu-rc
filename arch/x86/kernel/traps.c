@@ -739,7 +739,7 @@ static bool is_sysenter_singlestep(struct pt_regs *regs)
  *
  * May run on IST stack.
  */
-dotraplinkage void do_debug(struct pt_regs *regs, long error_code)
+DEFINE_IDTENTRY_DEBUG(exc_debug)
 {
 	struct task_struct *tsk = current;
 	int user_icebp = 0;
@@ -800,8 +800,8 @@ dotraplinkage void do_debug(struct pt_regs *regs, long error_code)
 		goto exit;
 #endif
 
-	if (notify_die(DIE_DEBUG, "debug", regs, (long)&dr6, error_code,
-							SIGTRAP) == NOTIFY_STOP)
+	if (notify_die(DIE_DEBUG, "debug", regs, (long)&dr6, 0,
+		       SIGTRAP) == NOTIFY_STOP)
 		goto exit;
 
 	/*
@@ -814,8 +814,8 @@ dotraplinkage void do_debug(struct pt_regs *regs, long error_code)
 	cond_local_irq_enable(regs);
 
 	if (v8086_mode(regs)) {
-		handle_vm86_trap((struct kernel_vm86_regs *) regs, error_code,
-					X86_TRAP_DB);
+		handle_vm86_trap((struct kernel_vm86_regs *) regs, 0,
+				 X86_TRAP_DB);
 		cond_local_irq_disable(regs);
 		debug_stack_usage_dec();
 		goto exit;
@@ -834,14 +834,13 @@ dotraplinkage void do_debug(struct pt_regs *regs, long error_code)
 	}
 	si_code = get_si_code(tsk->thread.debugreg6);
 	if (tsk->thread.debugreg6 & (DR_STEP | DR_TRAP_BITS) || user_icebp)
-		send_sigtrap(regs, error_code, si_code);
+		send_sigtrap(regs, 0, si_code);
 	cond_local_irq_disable(regs);
 	debug_stack_usage_dec();
 
 exit:
 	ist_exit(regs);
 }
-NOKPROBE_SYMBOL(do_debug);
 
 /*
  * Note that we play around with the 'TS' bit in an attempt to get

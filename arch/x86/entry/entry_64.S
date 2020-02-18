@@ -1066,12 +1066,10 @@ idtentry	X86_TRAP_PF		page_fault		do_page_fault			has_error_code=1
 idtentry	X86_TRAP_PF		async_page_fault	do_async_page_fault		has_error_code=1
 #endif
 
-idtentry_mce_db	X86_TRAP_DB		debug			do_debug
 idtentry_df	X86_TRAP_DF		double_fault		do_double_fault
 
 #ifdef CONFIG_XEN_PV
 idtentry	512 /* dummy */		hypervisor_callback	xen_do_hypervisor_callback	has_error_code=0
-idtentry	X86_TRAP_DB		xendebug		do_debug			has_error_code=0
 #endif
 
 	/*

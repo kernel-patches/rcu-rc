@@ -1455,16 +1455,6 @@ SYM_CODE_START_LOCAL_NOALIGN(common_exception)
 	jmp	ret_from_exception
 SYM_CODE_END(common_exception)
 
-SYM_CODE_START(debug)
-	/*
-	 * Entry from sysenter is now handled in common_exception
-	 */
-	ASM_CLAC
-	pushl	$0
-	pushl	$do_debug
-	jmp	common_exception
-SYM_CODE_END(debug)
-
 #ifdef CONFIG_DOUBLEFAULT
 SYM_CODE_START(double_fault)
 1:
