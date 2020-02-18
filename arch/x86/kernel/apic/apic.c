@@ -2159,7 +2159,7 @@ void __init register_lapic_address(unsigned long address)
  */
 
 /**
- * smp_spurious_interrupt - Catch all for interrupts raised on unused vectors
+ * spurious_interrupt - Catch all for interrupts raised on unused vectors
  * @regs:	Pointer to pt_regs on stack
  * @vector:	Vector number
  *
@@ -2169,8 +2169,7 @@ void __init register_lapic_address(unsigned long address)
  *
  * Also called from smp_spurious_apic_interrupt().
  */
-__visible void __irq_entry smp_spurious_interrupt(struct pt_regs *regs,
-						  unsigned long vector)
+DEFINE_IDTENTRY_IRQ(spurious_interrupt)
 {
 	u32 v;
 
@@ -2209,7 +2208,7 @@ out:
 
 __visible void smp_spurious_apic_interrupt(struct pt_regs *regs)
 {
-	smp_spurious_interrupt(regs, SPURIOUS_APIC_VECTOR);
+	__spurious_interrupt(regs, SPURIOUS_APIC_VECTOR);
 }
 
 /*

@@ -450,6 +450,10 @@ DECLARE_IDTENTRY_CR2(X86_TRAP_PF,	exc_page_fault);
 DECLARE_IDTENTRY_CR2(X86_TRAP_PF,	exc_async_page_fault);
 #endif
 
+/* Device interrupts common/spurious */
+DECLARE_IDTENTRY_IRQ(X6_TRAP_OTHER,	common_interrupt);
+DECLARE_IDTENTRY_IRQ(X6_TRAP_OTHER,	spurious_interrupt);
+
 #ifdef CONFIG_X86_MCE
 /* Machine check */
 DECLARE_IDTENTRY_MCE(X86_TRAP_MC,	exc_machine_check);

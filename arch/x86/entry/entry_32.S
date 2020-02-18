@@ -769,12 +769,6 @@ SYM_CODE_END(\asmsym)
 .endm
 
 /*
- * Include the defines which emit the idt entries which are shared
- * shared between 32 and 64 bit.
- */
-#include <asm/idtentry.h>
-
-/*
  * %eax: prev task
  * %edx: next task
  */
@@ -1235,7 +1229,7 @@ SYM_CODE_START(irq_entries_start)
     .rept (FIRST_SYSTEM_VECTOR - FIRST_EXTERNAL_VECTOR)
 	pushl	$(vector)
     vector=vector+1
-	jmp	common_interrupt
+	jmp	asm_common_interrupt
 	.align	8
     .endr
 SYM_CODE_END(irq_entries_start)
@@ -1247,40 +1241,31 @@ SYM_CODE_START(spurious_entries_start)
     .rept (NR_VECTORS - FIRST_SYSTEM_VECTOR)
 	pushl	$(vector)
     vector=vector+1
-	jmp	common_spurious
+	jmp	asm_spurious_interrupt
 	.align	8
     .endr
 SYM_CODE_END(spurious_entries_start)
-
-SYM_CODE_START_LOCAL(common_spurious)
-	ASM_CLAC
-	SAVE_ALL switch_stacks=1
-	ENCODE_FRAME_POINTER
-	TRACE_IRQS_OFF
-	movl	%esp, %eax
-	movl	PT_ORIG_EAX(%esp), %edx		/* get the vector from stack */
-	movl	$-1, PT_ORIG_EAX(%esp)		/* no syscall to restart */
-	call	smp_spurious_interrupt
-	jmp	ret_from_intr
-SYM_CODE_END(common_spurious)
 #endif
 
-/*
- * the CPU automatically disables interrupts when executing an IRQ vector,
- * so IRQ-flags tracing has to follow that:
- */
+.macro idtentry_irq vector cfunc
 	.p2align CONFIG_X86_L1_CACHE_SHIFT
-SYM_CODE_START_LOCAL(common_interrupt)
+SYM_CODE_START_LOCAL(asm_\cfunc)
 	ASM_CLAC
 	SAVE_ALL switch_stacks=1
 	ENCODE_FRAME_POINTER
-	TRACE_IRQS_OFF
 	movl	%esp, %eax
 	movl	PT_ORIG_EAX(%esp), %edx		/* get the vector from stack */
 	movl	$-1, PT_ORIG_EAX(%esp)		/* no syscall to restart */
-	call	do_IRQ
+	call	\cfunc
 	jmp	ret_from_intr
-SYM_CODE_END(common_interrupt)
+SYM_CODE_END(asm_\cfunc)
+.endm
+
+/*
+ * Include the defines which emit the idt entries which are shared
+ * shared between 32 and 64 bit.
+ */
+#include <asm/idtentry.h>
 
 #define BUILD_INTERRUPT3(name, nr, fn)			\
 SYM_FUNC_START(name)					\
