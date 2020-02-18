@@ -16,7 +16,7 @@
 #include "internal.h"
 
 /* Machine check handler for WinChip C6: */
-static void winchip_machine_check(struct pt_regs *regs, long error_code)
+static void winchip_machine_check(struct pt_regs *regs)
 {
 	ist_enter(regs);
 

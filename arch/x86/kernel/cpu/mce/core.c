@@ -1220,7 +1220,7 @@ static void __mc_scan_banks(struct mce *m, struct mce *final,
  * backing the user stack, tracing that reads the user stack will cause
  * potentially infinite recursion.
  */
-void notrace do_machine_check(struct pt_regs *regs, long error_code)
+void notrace do_machine_check(struct pt_regs *regs)
 {
 	DECLARE_BITMAP(valid_banks, MAX_NR_BANKS);
 	DECLARE_BITMAP(toclear, MAX_NR_BANKS);
@@ -1358,7 +1358,7 @@ void notrace do_machine_check(struct pt_regs *regs, long error_code)
 		local_irq_disable();
 		ist_end_non_atomic();
 	} else {
-		if (!fixup_exception(regs, X86_TRAP_MC, error_code, 0))
+		if (!fixup_exception(regs, X86_TRAP_MC, 0, 0))
 			mce_panic("Failed kernel mode recovery", &m, msg);
 	}
 
@@ -1889,21 +1889,19 @@ bool filter_mce(struct mce *m)
 }
 
 /* Handle unconfigured int18 (should never happen) */
-static void unexpected_machine_check(struct pt_regs *regs, long error_code)
+static void unexpected_machine_check(struct pt_regs *regs)
 {
 	pr_err("CPU#%d: Unexpected int18 (Machine Check)\n",
 	       smp_processor_id());
 }
 
 /* Call the installed machine check handler for this CPU setup. */
-void (*machine_check_vector)(struct pt_regs *, long error_code) =
-						unexpected_machine_check;
+void (*machine_check_vector)(struct pt_regs *) = unexpected_machine_check;
 
-dotraplinkage notrace void do_mce(struct pt_regs *regs, long error_code)
+DEFINE_IDTENTRY_MCE(exc_machine_check)
 {
-	machine_check_vector(regs, error_code);
+	machine_check_vector(regs);
 }
-NOKPROBE_SYMBOL(do_mce);
 
 /*
  * Called for each booted CPU to set up machine checks.

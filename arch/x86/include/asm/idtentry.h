@@ -217,4 +217,9 @@ DECLARE_IDTENTRY_ERRORCODE(X86_TRAP_SS,	exc_stack_segment);
 DECLARE_IDTENTRY_ERRORCODE(X86_TRAP_GP,	exc_general_protection);
 DECLARE_IDTENTRY_ERRORCODE(X86_TRAP_AC,	exc_alignment_check);
 
+#ifdef CONFIG_X86_MCE
+/* Machine check */
+DECLARE_IDTENTRY_MCE(X86_TRAP_MC,	exc_machine_check);
+#endif
+
 #endif
