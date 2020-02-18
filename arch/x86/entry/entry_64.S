@@ -1071,7 +1071,6 @@ idtentry_df	X86_TRAP_DF		double_fault		do_double_fault
 
 #ifdef CONFIG_XEN_PV
 idtentry	512 /* dummy */		hypervisor_callback	xen_do_hypervisor_callback	has_error_code=0
-idtentry	X86_TRAP_NMI		xennmi			do_nmi				has_error_code=0
 idtentry	X86_TRAP_DB		xendebug		do_debug			has_error_code=0
 #endif
 
@@ -1400,7 +1399,7 @@ SYM_CODE_END(error_exit)
  *	%r14: Used to save/restore the CR3 of the interrupted context
  *	      when PAGE_TABLE_ISOLATION is in use.  Do not clobber.
  */
-SYM_CODE_START(nmi)
+SYM_CODE_START(asm_exc_nmi)
 	UNWIND_HINT_IRET_REGS
 
 	/*
@@ -1485,7 +1484,7 @@ SYM_CODE_START(nmi)
 
 	movq	%rsp, %rdi
 	movq	$-1, %rsi
-	call	do_nmi
+	call	exc_nmi
 
 	/*
 	 * Return back to user mode.  We must *not* do the normal exit
@@ -1542,7 +1541,7 @@ SYM_CODE_START(nmi)
 	 * end_repeat_nmi, then we are a nested NMI.  We must not
 	 * modify the "iret" frame because it's being written by
 	 * the outer NMI.  That's okay; the outer NMI handler is
-	 * about to about to call do_nmi anyway, so we can just
+	 * about to about to call exc_nmi() anyway, so we can just
 	 * resume the outer NMI.
 	 */
 
@@ -1661,7 +1660,7 @@ repeat_nmi:
 	 * RSP is pointing to "outermost RIP".  gsbase is unknown, but, if
 	 * we're repeating an NMI, gsbase has the same value that it had on
 	 * the first iteration.  paranoid_entry will load the kernel
-	 * gsbase if needed before we call do_nmi.  "NMI executing"
+	 * gsbase if needed before we call exc_nmi().  "NMI executing"
 	 * is zero.
 	 */
 	movq	$1, 10*8(%rsp)		/* Set "NMI executing". */
@@ -1695,10 +1694,10 @@ end_repeat_nmi:
 	call	paranoid_entry
 	UNWIND_HINT_REGS
 
-	/* paranoidentry do_nmi, 0; without TRACE_IRQS_OFF */
+	/* paranoidentry exc_nmi(), 0; without TRACE_IRQS_OFF */
 	movq	%rsp, %rdi
 	movq	$-1, %rsi
-	call	do_nmi
+	call	exc_nmi
 
 	/* Always restore stashed CR3 value (see paranoid_entry) */
 	RESTORE_CR3 scratch_reg=%r15 save_reg=%r14
@@ -1735,7 +1734,7 @@ nmi_restore:
 	 * about espfix64 on the way back to kernel mode.
 	 */
 	iretq
-SYM_CODE_END(nmi)
+SYM_CODE_END(asm_exc_nmi)
 
 #ifndef CONFIG_IA32_EMULATION
 /*

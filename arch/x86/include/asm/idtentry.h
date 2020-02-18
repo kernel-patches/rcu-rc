@@ -238,4 +238,8 @@ DECLARE_IDTENTRY_ERRORCODE(X86_TRAP_AC,	exc_alignment_check);
 DECLARE_IDTENTRY_MCE(X86_TRAP_MC,	exc_machine_check);
 #endif
 
+/* NMI */
+DECLARE_IDTENTRY_NMI(X86_TRAP_NMI,	exc_nmi);
+DECLARE_IDTENTRY_XEN(X86_TRAP_NMI,	nmi);
+
 #endif
