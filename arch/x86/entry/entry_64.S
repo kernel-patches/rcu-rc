@@ -495,8 +495,9 @@ SYM_CODE_END(spurious_entries_start)
  * idtentry_body - Macro to emit code calling the C function
  * @cfunc:		C function to be called
  * @has_error_code:	Hardware pushed error code on stack
+ * @irq_stack:		Execute @cfunc on the IRQ stack (device interrupts)
  */
-.macro idtentry_body cfunc has_error_code:req
+.macro idtentry_body cfunc has_error_code:req irq_stack:req
 
 	call	error_entry
 	UNWIND_HINT_REGS
@@ -508,7 +509,15 @@ SYM_CODE_END(spurious_entries_start)
 		movq	$-1, ORIG_RAX(%rsp)	/* no syscall to restart */
 	.endif
 
+	.if \irq_stack
+		ENTER_IRQ_STACK old_rsp=%rdi
+	.endif
+
 	call	\cfunc
+
+	.if \irq_stack
+		LEAVE_IRQ_STACK			/* interrupts are disabled */
+	.endif
 
 	jmp	error_exit
 .endm
@@ -519,11 +528,12 @@ SYM_CODE_END(spurious_entries_start)
  * @asmsym:		ASM symbol for the entry point
  * @cfunc:		C function to be called
  * @has_error_code:	Hardware pushed error code on stack
+ * @irq_stack:		Execute @cfunc on the IRQ stack (device interrupts)
  *
  * The macro emits code to set up the kernel context for straight forward
  * and simple IDT entries. No IST stack, no paranoid entry checks.
  */
-.macro idtentry vector asmsym cfunc has_error_code:req
+.macro idtentry vector asmsym cfunc has_error_code:req irq_stack=0
 SYM_CODE_START(\asmsym)
 	UNWIND_HINT_IRET_REGS offset=\has_error_code*8
 	ASM_CLAC
@@ -546,7 +556,7 @@ SYM_CODE_START(\asmsym)
 .Lfrom_usermode_no_gap_\@:
 	.endif
 
-	idtentry_body \cfunc \has_error_code
+	idtentry_body \cfunc \has_error_code \irq_stack
 
 _ASM_NOKPROBE(\asmsym)
 SYM_CODE_END(\asmsym)
@@ -621,7 +631,7 @@ SYM_CODE_START(\asmsym)
 
 	/* Switch to the regular task stack and use the noist entry point */
 .Lfrom_usermode_switch_stack_\@:
-	idtentry_body noist_\cfunc, has_error_code=0
+	idtentry_body noist_\cfunc, has_error_code=0 irq_stack=0
 
 _ASM_NOKPROBE(\asmsym)
 SYM_CODE_END(\asmsym)
