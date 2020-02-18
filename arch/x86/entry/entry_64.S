@@ -1061,8 +1061,6 @@ apicinterrupt IRQ_WORK_VECTOR			irq_work_interrupt		smp_irq_work_interrupt
  * Exception entry points.
  */
 
-idtentry	X86_TRAP_XF		simd_coprocessor_error	do_simd_coprocessor_error	has_error_code=0
-
 idtentry	X86_TRAP_PF		page_fault		do_page_fault			has_error_code=1
 #ifdef CONFIG_KVM_GUEST
 idtentry	X86_TRAP_PF		async_page_fault	do_async_page_fault		has_error_code=1

@@ -848,7 +848,7 @@ NOKPROBE_SYMBOL(do_debug);
  * the correct behaviour even in the presence of the asynchronous
  * IRQ13 behaviour
  */
-static void math_error(struct pt_regs *regs, int error_code, int trapnr)
+static void math_error(struct pt_regs *regs, int trapnr)
 {
 	struct task_struct *task = current;
 	struct fpu *fpu = &task->thread.fpu;
@@ -859,15 +859,15 @@ static void math_error(struct pt_regs *regs, int error_code, int trapnr)
 	cond_local_irq_enable(regs);
 
 	if (!user_mode(regs)) {
-		if (fixup_exception(regs, trapnr, error_code, 0))
+		if (fixup_exception(regs, trapnr, 0, 0))
 			return;
 
-		task->thread.error_code = error_code;
+		task->thread.error_code = 0;
 		task->thread.trap_nr = trapnr;
 
-		if (notify_die(DIE_TRAP, str, regs, error_code,
-					trapnr, SIGFPE) != NOTIFY_STOP)
-			die(str, regs, error_code);
+		if (notify_die(DIE_TRAP, str, regs, 0,trapnr,
+			       SIGFPE) != NOTIFY_STOP)
+			die(str, regs, 0);
 		return;
 	}
 
@@ -877,7 +877,7 @@ static void math_error(struct pt_regs *regs, int error_code, int trapnr)
 	fpu__save(fpu);
 
 	task->thread.trap_nr	= trapnr;
-	task->thread.error_code = error_code;
+	task->thread.error_code = 0;
 
 	si_code = fpu__exception_code(fpu, trapnr);
 	/* Retry when we get spurious exceptions: */
@@ -891,14 +891,13 @@ static void math_error(struct pt_regs *regs, int error_code, int trapnr)
 DEFINE_IDTENTRY(exc_coprocessor_error)
 {
 	RCU_LOCKDEP_WARN(!rcu_is_watching(), "entry code didn't wake RCU");
-	math_error(regs, 0, X86_TRAP_MF);
+	math_error(regs, X86_TRAP_MF);
 }
 
-dotraplinkage void
-do_simd_coprocessor_error(struct pt_regs *regs, long error_code)
+DEFINE_IDTENTRY(exc_simd_coprocessor_error)
 {
 	RCU_LOCKDEP_WARN(!rcu_is_watching(), "entry code didn't wake RCU");
-	math_error(regs, error_code, X86_TRAP_XF);
+	math_error(regs, X86_TRAP_XF);
 }
 
 DEFINE_IDTENTRY(exc_spurious_interrupt_bug)
