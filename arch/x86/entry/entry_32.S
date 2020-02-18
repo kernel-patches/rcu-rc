@@ -1698,13 +1698,6 @@ SYM_CODE_START(nmi)
 #endif
 SYM_CODE_END(nmi)
 
-SYM_CODE_START(int3)
-	ASM_CLAC
-	pushl	$0
-	pushl	$do_int3
-	jmp	common_exception
-SYM_CODE_END(int3)
-
 SYM_CODE_START(general_protection)
 	ASM_CLAC
 	pushl	$do_general_protection
