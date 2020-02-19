@@ -14,6 +14,7 @@
 #include <linux/irq.h>
 
 #include <asm/apic.h>
+#include <asm/traps.h>
 #include <asm/io_apic.h>
 #include <asm/irq.h>
 #include <asm/mce.h>
@@ -269,7 +270,7 @@ void (*x86_platform_ipi_callback)(void) = NULL;
 /*
  * Handler for X86_PLATFORM_IPI_VECTOR.
  */
-__visible void __irq_entry smp_x86_platform_ipi(struct pt_regs *regs)
+DEFINE_IDTENTRY_SYSVEC(sysvec_x86_platform_ipi)
 {
 	struct pt_regs *old_regs = set_irq_regs(regs);
 
