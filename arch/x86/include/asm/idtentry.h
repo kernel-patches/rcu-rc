@@ -308,6 +308,13 @@ static __always_inline void __##func(struct pt_regs *regs,		\
 
 #endif /* __ASSEMBLY__ */
 
+/*
+ * Dummy trap number so the low level ASM macro vector number checks do not
+ * match which results in emitting plain IDTENTRY stubs without bells and
+ * whistels.
+ */
+#define X86_TRAP_OTHER		~0uL
+
 /* Simple exception entries: */
 DECLARE_IDTENTRY(X86_TRAP_DE,		exc_divide_error);
 DECLARE_IDTENTRY(X86_TRAP_BP,		exc_int3);
@@ -347,5 +354,11 @@ DECLARE_IDTENTRY_XEN(X86_TRAP_DB,	debug);
 #if defined(CONFIG_X86_64) || defined(CONFIG_DOUBLEFAULT)
 DECLARE_IDTENTRY_DF(X86_TRAP_DF,	exc_double_fault);
 #endif
+
+#ifdef CONFIG_XEN_PV
+DECLARE_IDTENTRY(X6_TRAP_OTHER,		exc_xen_hypervisor_callback);
+#endif
+
+#undef X86_TRAP_OTHER
 
 #endif
