@@ -171,6 +171,46 @@ static __always_inline void __##func(struct pt_regs *regs,		\
 				     unsigned long error_code,		\
 				     unsigned long address)
 
+/**
+ * DECLARE_IDTENTRY_IRQ - Declare functions for device interrupt IDT entry
+ *			  points (common/spurious)
+ * @vector:	Vector number (ignored for C)
+ * @func:	Function name of the entry point
+ *
+ * Declares three functions:
+ * - The ASM entry point: asm_##func
+ * - The XEN PV trap entry point: xen_##func (maybe unused)
+ * - The C handler called from the ASM entry point
+ */
+#define DECLARE_IDTENTRY_IRQ(vector, func)				\
+	asmlinkage void asm_##func(void);				\
+	asmlinkage void xen_asm_##func(void);				\
+	__visible void func(struct pt_regs *regs, unsigned long vector)
+
+/**
+ * DEFINE_IDTENTRY_IRQ - Emit code for device interrupt IDT entry points
+ * @func:	Function name of the entry point
+ *
+ * @func is called from ASM entry code with interrupts disabled.
+ *
+ * Used for C handlers which require the vector number.
+ */
+#define DEFINE_IDTENTRY_IRQ(func)					\
+static __always_inline void __##func(struct pt_regs *regs,		\
+				     unsigned long vector);		\
+									\
+__visible notrace __irq_entry void func(struct pt_regs *regs,		\
+					unsigned long vector)		\
+{									\
+	idtentry_enter(regs);						\
+	__##func (regs, vector);					\
+	idtentry_exit(regs);						\
+}									\
+NOKPROBE_SYMBOL(func);							\
+									\
+static __always_inline void __##func(struct pt_regs *regs,		\
+				     unsigned long vector)
+
 #ifdef CONFIG_X86_64
 /**
  * DECLARE_IDTENTRY_IST - Declare functions for IST handling IDT entry points
@@ -339,6 +379,10 @@ static __always_inline void __##func(struct pt_regs *regs,		\
 
 /* Special case for 32bit IRET 'trap'. Do not emit ASM code */
 #define DECLARE_IDTENTRY_SW(vector, func)
+
+/* Entries for common/spurious (device) interrupts */
+#define DECLARE_IDTENTRY_IRQ(vector, func)			\
+	idtentry_irq vector func
 
 #ifdef CONFIG_X86_64
 # define DECLARE_IDTENTRY_MCE(vector, func)			\
