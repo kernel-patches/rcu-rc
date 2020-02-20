@@ -12,6 +12,8 @@
 #define _ASM_X86_UV_UV_BAU_H
 
 #include <linux/bitmap.h>
+#include <asm/idtentry.h>
+
 #define BITSPERBYTE 8
 
 /*
@@ -799,11 +801,9 @@ static inline void bau_cpubits_clear(struct bau_local_cpumask *dstp, int nbits)
 	bitmap_zero(&dstp->bits, nbits);
 }
 
-extern void uv_bau_message_intr1(void);
 #ifdef CONFIG_TRACING
-#define trace_uv_bau_message_intr1 uv_bau_message_intr1
+#define trace_uv_bau_message_intr1 sysvec_uv_bau_message
 #endif
-extern void uv_bau_timeout_intr1(void);
 
 struct atomic_short {
 	short counter;
