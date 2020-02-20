@@ -64,12 +64,6 @@
  * enough to patch inline, increasing performance.
  */
 
-#ifdef CONFIG_PREEMPTION
-# define preempt_stop(clobbers)	DISABLE_INTERRUPTS(clobbers); TRACE_IRQS_OFF
-#else
-# define preempt_stop(clobbers)
-#endif
-
 .macro TRACE_IRQS_IRET
 #ifdef CONFIG_TRACE_IRQFLAGS
 	testl	$X86_EFLAGS_IF, PT_EFLAGS(%esp)     # interrupts off?
@@ -876,7 +870,6 @@ SYM_CODE_END(ret_from_fork)
 
 	# userspace resumption stub bypassing syscall exit tracing
 SYM_CODE_START_LOCAL(ret_from_exception)
-	preempt_stop(CLBR_ANY)
 ret_from_intr:
 #ifdef CONFIG_VM86
 	movl	PT_EFLAGS(%esp), %eax		# mix EFLAGS and CS
@@ -892,8 +885,6 @@ ret_from_intr:
 	cmpl	$USER_RPL, %eax
 	jb	restore_all_kernel		# not returning to v8086 or userspace
 
-	DISABLE_INTERRUPTS(CLBR_ANY)
-	TRACE_IRQS_OFF
 	movl	%esp, %eax
 	call	prepare_exit_to_usermode
 	jmp	restore_all_switch_stack
@@ -1135,7 +1126,6 @@ restore_all_switch_stack:
 
 restore_all_kernel:
 #ifdef CONFIG_PREEMPTION
-	DISABLE_INTERRUPTS(CLBR_ANY)
 	cmpl	$0, PER_CPU_VAR(__preempt_count)
 	jnz	.Lno_preempt
 	testl	$X86_EFLAGS_IF, PT_EFLAGS(%esp)	# interrupts off (exception path) ?
@@ -1299,7 +1289,6 @@ SYM_FUNC_START(exc_xen_hypervisor_callback)
 	pushl	$-1				/* orig_ax = -1 => not a system call */
 	SAVE_ALL
 	ENCODE_FRAME_POINTER
-	TRACE_IRQS_OFF
 	mov	%esp, %eax
 	call	xen_evtchn_do_upcall
 #ifndef CONFIG_PREEMPTION
