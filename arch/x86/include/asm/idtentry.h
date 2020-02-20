@@ -128,6 +128,48 @@ NOKPROBE_SYMBOL(func);							\
 static __always_inline void __##func(struct pt_regs *regs,		\
 				     unsigned long error_code)
 
+/**
+ * DECLARE_IDTENTRY_CR2 - Declare functions for fault handling IDT entry points
+ * @vector:	Vector number (ignored for C)
+ * @func:	Function name of the entry point
+ *
+ * Declares three functions:
+ * - The ASM entry point: asm_##func
+ * - The XEN PV trap entry point: xen_##func (maybe unused)
+ * - The C handler called from the ASM entry point
+ */
+#define DECLARE_IDTENTRY_CR2(vector, func)				\
+	asmlinkage void asm_##func(void);				\
+	asmlinkage void xen_asm_##func(void);				\
+	__visible void func(struct pt_regs *regs, unsigned long error_code)
+
+/**
+ * DEFINE_IDTENTRY_CR2 - Emit code for fault handling IDT entry points
+ * @func:	Function name of the entry point
+ *
+ * Same as IDTENTRY_ERRORCODE but reads CR2 before invoking
+ * idtentry_enter() and hands the CR2 address into the function body.
+ */
+#define DEFINE_IDTENTRY_CR2(func)					\
+static __always_inline void __##func(struct pt_regs *regs,		\
+				     unsigned long error_code,		\
+				     unsigned long address);		\
+									\
+__visible notrace void func(struct pt_regs *regs,			\
+			    unsigned long error_code)			\
+{									\
+	unsigned long address = read_cr2();				\
+									\
+	idtentry_enter(regs);						\
+	__##func (regs, error_code, address);				\
+	idtentry_exit(regs);						\
+}									\
+NOKPROBE_SYMBOL(func);							\
+									\
+static __always_inline void __##func(struct pt_regs *regs,		\
+				     unsigned long error_code,		\
+				     unsigned long address)
+
 #ifdef CONFIG_X86_64
 /**
  * DECLARE_IDTENTRY_IST - Declare functions for IST handling IDT entry points
@@ -290,6 +332,9 @@ static __always_inline void __##func(struct pt_regs *regs,		\
 
 #define DECLARE_IDTENTRY_ERRORCODE(vector, func)		\
 	idtentry vector asm_##func func has_error_code=1
+
+#define DECLARE_IDTENTRY_CR2(vector, func)			\
+	DECLARE_IDTENTRY_ERRORCODE(vector, func)
 
 /* Special case for 32bit IRET 'trap'. Do not emit ASM code */
 #define DECLARE_IDTENTRY_SW(vector, func)
