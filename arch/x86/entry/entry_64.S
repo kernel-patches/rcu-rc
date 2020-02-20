@@ -577,6 +577,21 @@ SYM_CODE_END(\asmsym)
 .endm
 
 /*
+ * System vectors which invoke their handlers directly and are not
+ * going through the regular common device interrupt handling code.
+ *
+ * Stick them all into the irqentry.text section.
+ */
+#define PUSH_SECTION_IRQENTRY	.pushsection .irqentry.text, "ax"
+#define POP_SECTION_IRQENTRY	.popsection
+
+.macro idtentry_sysvec vector cfunc
+	PUSH_SECTION_IRQENTRY
+	idtentry \vector asm_\cfunc \cfunc has_error_code=0 irq_stack=0
+	POP_SECTION_IRQENTRY
+.endm
+
+/*
  * MCE and DB exceptions
  */
 #define CPU_TSS_IST(x) PER_CPU_VAR(cpu_tss_rw) + (TSS_ist + (x) * 8)
@@ -972,10 +987,6 @@ SYM_CODE_START(\sym)
 SYM_CODE_END(\sym)
 _ASM_NOKPROBE(\sym)
 .endm
-
-/* Make sure APIC interrupt handlers end up in the irqentry section: */
-#define PUSH_SECTION_IRQENTRY	.pushsection .irqentry.text, "ax"
-#define POP_SECTION_IRQENTRY	.popsection
 
 .macro apicinterrupt num sym do_sym
 PUSH_SECTION_IRQENTRY

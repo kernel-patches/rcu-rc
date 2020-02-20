@@ -210,6 +210,27 @@ NOKPROBE_SYMBOL(func);							\
 									\
 static __always_inline void __##func(struct pt_regs *regs,		\
 				     unsigned long vector)
+/**
+ * DECLARE_IDTENTRY_SYSVEC - Declare functions for system vector entry points
+ * @vector:	Vector number (ignored for C)
+ * @func:	Function name of the entry point
+ *
+ * Declares three functions:
+ * - The ASM entry point: asm_##func
+ * - The XEN PV trap entry point: xen_##func (maybe unused)
+ * - The C handler called from the ASM entry point
+ */
+#define DECLARE_IDTENTRY_SYSVEC(vector, func)				\
+	DECLARE_IDTENTRY(vector, func)
+
+/**
+ * DEFINE_IDTENTRY_SYSVEC - Emit code for system vector IDT entry points
+ * @func:	Function name of the entry point
+ *
+ * @func is called from ASM entry code with interrupts disabled.
+ */
+#define DEFINE_IDTENTRY_SYSVEC(func)					\
+	DEFINE_IDTENTRY(func)
 
 #ifdef CONFIG_X86_64
 /**
@@ -383,6 +404,10 @@ static __always_inline void __##func(struct pt_regs *regs,		\
 /* Entries for common/spurious (device) interrupts */
 #define DECLARE_IDTENTRY_IRQ(vector, func)			\
 	idtentry_irq vector func
+
+/* System vector entries */
+#define DECLARE_IDTENTRY_SYSVEC(__vector, __func)		\
+	idtentry_sysvec __vector __func
 
 #ifdef CONFIG_X86_64
 # define DECLARE_IDTENTRY_MCE(vector, func)			\
