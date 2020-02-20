@@ -27,6 +27,7 @@
 #include <asm/mmu_context.h>
 #include <asm/proto.h>
 #include <asm/apic.h>
+#include <asm/idtentry.h>
 #include <asm/nmi.h>
 #include <asm/mce.h>
 #include <asm/trace/irq_vectors.h>
@@ -130,8 +131,7 @@ static int smp_stop_nmi_callback(unsigned int val, struct pt_regs *regs)
 /*
  * this function calls the 'stop' function on all other CPUs in the system.
  */
-
-asmlinkage __visible void smp_reboot_interrupt(void)
+DEFINE_IDTENTRY_SYSVEC(sysvec_reboot)
 {
 	ipi_entering_ack_irq();
 	cpu_emergency_vmxoff();
@@ -223,7 +223,7 @@ static void native_stop_other_cpus(int wait)
  * Reschedule call back. KVM uses this interrupt to force a cpu out of
  * guest mode
  */
-__visible void __irq_entry smp_reschedule_interrupt(struct pt_regs *regs)
+DEFINE_IDTENTRY_SYSVEC(sysvec_reschedule)
 {
 	ack_APIC_irq();
 	inc_irq_stat(irq_resched_count);
@@ -244,7 +244,7 @@ __visible void __irq_entry smp_reschedule_interrupt(struct pt_regs *regs)
 	scheduler_ipi();
 }
 
-__visible void __irq_entry smp_call_function_interrupt(struct pt_regs *regs)
+DEFINE_IDTENTRY_SYSVEC(sysvec_call_function)
 {
 	ipi_entering_ack_irq();
 	trace_call_function_entry(CALL_FUNCTION_VECTOR);
@@ -254,7 +254,7 @@ __visible void __irq_entry smp_call_function_interrupt(struct pt_regs *regs)
 	exiting_irq();
 }
 
-__visible void __irq_entry smp_call_function_single_interrupt(struct pt_regs *r)
+DEFINE_IDTENTRY_SYSVEC(sysvec_call_function_single)
 {
 	ipi_entering_ack_irq();
 	trace_call_function_single_entry(CALL_FUNCTION_SINGLE_VECTOR);
