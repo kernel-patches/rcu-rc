@@ -19,6 +19,8 @@ static __always_inline void enter_from_user_context(void)
 static __always_inline void enter_from_user_context(void) { }
 #endif
 
+void return_from_exception(struct pt_regs *regs);
+
 /**
  * idtentry_enter - Handle state tracking on idtentry
  * @regs:	Pointer to pt_regs of interrupted context

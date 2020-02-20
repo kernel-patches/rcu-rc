@@ -480,3 +480,46 @@ __visible notrace long do_fast_syscall_32(struct pt_regs *regs)
 NOKPROBE_SYMBOL(do_fast_syscall_32);
 
 #endif /* CONFIG_X86_32 || CONFIG_IA32_EMULATION */
+
+/**
+ * return_from_exception - Common code to handle return from exceptions
+ * @regs	- Pointer to pt_regs (exception entry regs)
+ *
+ * Depending on the return target (kernel/user) this runs the necessary
+ * preemption and work checks if possible and reguired and returns to
+ * the caller with interrupts disabled and no further work pending.
+ *
+ * This is the last action before returning to the low level ASM code which
+ * just needs to return to the appropriate context.
+ *
+ * Invoked by all exception/interrupt IDTENTRY handlers which are not
+ * returning through the paranoid exit path (all except NMI, MCE, DF).
+ */
+void notrace return_from_exception(struct pt_regs *regs)
+{
+	/*
+	 * Unconditionally disable interrupts as some handlers like
+	 * the fault handler are not guaranteeing to return with
+	 * interrupts disabled.
+	 */
+	local_irq_disable();
+
+	/* Check whether this returns to user mode */
+	if (user_mode(regs)) {
+		prepare_exit_to_usermode(regs);
+	} else {
+		/* Interrupts stay disabled on return? */
+		if (!(regs->flags & X86_EFLAGS_IF))
+			return;
+
+		/* Check kernel preemption, if enabled */
+		if (IS_ENABLED(CONFIG_PREEMPTION)) {
+			/* Check for preemption */
+			if (!preempt_count() && need_resched())
+				preempt_schedule_irq();
+		}
+	}
+	/* Make sure the tracer knows that IRET will enable interrupts */
+	trace_hardirqs_on();
+}
+NOKPROBE_SYMBOL(return_from_exception);
