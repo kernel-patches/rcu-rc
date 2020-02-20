@@ -301,7 +301,7 @@ EXPORT_SYMBOL_GPL(kvm_set_posted_intr_wakeup_handler);
 /*
  * Handler for POSTED_INTERRUPT_VECTOR.
  */
-__visible void smp_kvm_posted_intr_ipi(struct pt_regs *regs)
+DEFINE_IDTENTRY_SYSVEC(sysvec_kvm_posted_intr_ipi)
 {
 	struct pt_regs *old_regs = set_irq_regs(regs);
 
@@ -314,7 +314,7 @@ __visible void smp_kvm_posted_intr_ipi(struct pt_regs *regs)
 /*
  * Handler for POSTED_INTERRUPT_WAKEUP_VECTOR.
  */
-__visible void smp_kvm_posted_intr_wakeup_ipi(struct pt_regs *regs)
+DEFINE_IDTENTRY_SYSVEC(sysvec_kvm_posted_intr_wakeup_ipi)
 {
 	struct pt_regs *old_regs = set_irq_regs(regs);
 
@@ -328,7 +328,7 @@ __visible void smp_kvm_posted_intr_wakeup_ipi(struct pt_regs *regs)
 /*
  * Handler for POSTED_INTERRUPT_NESTED_VECTOR.
  */
-__visible void smp_kvm_posted_intr_nested_ipi(struct pt_regs *regs)
+DEFINE_IDTENTRY_SYSVEC(sysvec_kvm_posted_intr_nested_ipi)
 {
 	struct pt_regs *old_regs = set_irq_regs(regs);
 

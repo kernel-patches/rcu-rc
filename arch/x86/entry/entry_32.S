@@ -1286,9 +1286,6 @@ SYM_FUNC_END(name)
 #define BUILD_INTERRUPT(name, nr)		\
 	BUILD_INTERRUPT3(name, nr, smp_##name);	\
 
-/* The include is where all of the SMP etc. interrupts come from */
-#include <asm/entry_arch.h>
-
 #ifdef CONFIG_PARAVIRT
 SYM_CODE_START(native_iret)
 	iret
