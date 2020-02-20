@@ -862,15 +862,10 @@ SYM_CODE_START(ret_from_fork)
 SYM_CODE_END(ret_from_fork)
 
 /*
- * Return to user mode is not as complex as all this looks,
- * but we want the default path for a system call return to
- * go as quickly as possible which is why some of this is
- * less clear than it otherwise should be.
+ * C code already did all preparatory work (prepare_exit_to_usermode or
+ * kernel preemption) so this just has to select the proper return path.
  */
-
-	# userspace resumption stub bypassing syscall exit tracing
 SYM_CODE_START_LOCAL(ret_from_exception)
-ret_from_intr:
 #ifdef CONFIG_VM86
 	movl	PT_EFLAGS(%esp), %eax		# mix EFLAGS and CS
 	movb	PT_CS(%esp), %al
@@ -884,9 +879,6 @@ ret_from_intr:
 #endif
 	cmpl	$USER_RPL, %eax
 	jb	restore_all_kernel		# not returning to v8086 or userspace
-
-	movl	%esp, %eax
-	call	prepare_exit_to_usermode
 	jmp	restore_all_switch_stack
 SYM_CODE_END(ret_from_exception)
 
@@ -1125,15 +1117,6 @@ restore_all_switch_stack:
 	INTERRUPT_RETURN
 
 restore_all_kernel:
-#ifdef CONFIG_PREEMPTION
-	cmpl	$0, PER_CPU_VAR(__preempt_count)
-	jnz	.Lno_preempt
-	testl	$X86_EFLAGS_IF, PT_EFLAGS(%esp)	# interrupts off (exception path) ?
-	jz	.Lno_preempt
-	call	preempt_schedule_irq
-.Lno_preempt:
-#endif
-	TRACE_IRQS_IRET
 	PARANOID_EXIT_TO_KERNEL_MODE
 	BUG_IF_WRONG_CR3
 	RESTORE_REGS 4
@@ -1247,7 +1230,7 @@ SYM_CODE_START_LOCAL(asm_\cfunc)
 	movl	PT_ORIG_EAX(%esp), %edx		/* get the vector from stack */
 	movl	$-1, PT_ORIG_EAX(%esp)		/* no syscall to restart */
 	call	\cfunc
-	jmp	ret_from_intr
+	jmp	ret_from_exception
 SYM_CODE_END(asm_\cfunc)
 .endm
 
@@ -1294,7 +1277,7 @@ SYM_FUNC_START(exc_xen_hypervisor_callback)
 #ifndef CONFIG_PREEMPTION
 	call	xen_maybe_preempt_hcall
 #endif
-	jmp	ret_from_intr
+	jmp	ret_from_exception
 SYM_FUNC_END(exc_xen_hypervisor_callback)
 
 /*

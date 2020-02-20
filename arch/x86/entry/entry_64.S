@@ -701,10 +701,6 @@ SYM_CODE_END(\asmsym)
 #include <asm/idtentry.h>
 
 SYM_CODE_START_LOCAL(common_interrupt_return)
-	/* Interrupt came from user space */
-.Lretint_user:
-	mov	%rsp,%rdi
-	call	prepare_exit_to_usermode
 
 SYM_INNER_LABEL(swapgs_restore_regs_and_return_to_usermode, SYM_L_GLOBAL)
 #ifdef CONFIG_DEBUG_ENTRY
@@ -746,24 +742,7 @@ SYM_INNER_LABEL(swapgs_restore_regs_and_return_to_usermode, SYM_L_GLOBAL)
 	SWAPGS
 	INTERRUPT_RETURN
 
-
 /* Returning to kernel space */
-retint_kernel:
-#ifdef CONFIG_PREEMPTION
-	/* Interrupts are off */
-	/* Check if we need preemption */
-	btl	$9, EFLAGS(%rsp)		/* were interrupts off? */
-	jnc	1f
-	cmpl	$0, PER_CPU_VAR(__preempt_count)
-	jnz	1f
-	call	preempt_schedule_irq
-1:
-#endif
-	/*
-	 * The iretq could re-enable interrupts:
-	 */
-	TRACE_IRQS_IRETQ
-
 SYM_INNER_LABEL(restore_regs_and_return_to_kernel, SYM_L_GLOBAL)
 #ifdef CONFIG_DEBUG_ENTRY
 	/* Assert that pt_regs indicates kernel mode. */
@@ -1167,8 +1146,8 @@ SYM_CODE_START_LOCAL(error_exit)
 	UNWIND_HINT_REGS
 	DEBUG_ENTRY_ASSERT_IRQS_OFF
 	testb	$3, CS(%rsp)
-	jz	retint_kernel
-	jmp	.Lretint_user
+	jz	restore_regs_and_return_to_kernel
+	jmp	swapgs_restore_regs_and_return_to_usermode
 SYM_CODE_END(error_exit)
 
 /*

@@ -41,11 +41,14 @@ static __always_inline void idtentry_enter(struct pt_regs *regs)
 /**
  * idtentry_exit - Prepare returning to low level ASM code
  *
- * Disables interrupts before returning
+ * Invokes return_from_exception() which disables interrupts
+ * and handles return to user mode work and kernel preemption.
+ * This function returns with interrupts disabled and the
+ * hardirq tracing state updated.
  */
 static __always_inline void idtentry_exit(struct pt_regs *regs)
 {
-	local_irq_disable();
+	return_from_exception(regs);
 }
 
 /**
