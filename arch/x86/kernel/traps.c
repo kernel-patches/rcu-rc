@@ -739,14 +739,12 @@ static bool is_sysenter_singlestep(struct pt_regs *regs)
  *
  * May run on IST stack.
  */
-DEFINE_IDTENTRY_DEBUG(exc_debug)
+static void notrace handle_debug(struct pt_regs *regs)
 {
 	struct task_struct *tsk = current;
 	int user_icebp = 0;
 	unsigned long dr6;
 	int si_code;
-
-	ist_enter(regs);
 
 	get_debugreg(dr6, 6);
 	/*
@@ -776,7 +774,7 @@ DEFINE_IDTENTRY_DEBUG(exc_debug)
 		     is_sysenter_singlestep(regs))) {
 		dr6 &= ~DR_STEP;
 		if (!dr6)
-			goto exit;
+			return;
 		/*
 		 * else we might have gotten a single-step trap and hit a
 		 * watchpoint at the same time, in which case we should fall
@@ -797,12 +795,12 @@ DEFINE_IDTENTRY_DEBUG(exc_debug)
 
 #ifdef CONFIG_KPROBES
 	if (kprobe_debug_handler(regs))
-		goto exit;
+		return;
 #endif
 
 	if (notify_die(DIE_DEBUG, "debug", regs, (long)&dr6, 0,
 		       SIGTRAP) == NOTIFY_STOP)
-		goto exit;
+		return;
 
 	/*
 	 * Let others (NMI) know that the debug stack is in use
@@ -818,7 +816,7 @@ DEFINE_IDTENTRY_DEBUG(exc_debug)
 				 X86_TRAP_DB);
 		cond_local_irq_disable(regs);
 		debug_stack_usage_dec();
-		goto exit;
+		return;
 	}
 
 	if (WARN_ON_ONCE((dr6 & DR_STEP) && !user_mode(regs))) {
@@ -837,10 +835,26 @@ DEFINE_IDTENTRY_DEBUG(exc_debug)
 		send_sigtrap(regs, 0, si_code);
 	cond_local_irq_disable(regs);
 	debug_stack_usage_dec();
+}
+NOKPROBE_SYMBOL(handle_debug);
 
-exit:
+/*
+ * IST stack entry.
+ */
+DEFINE_IDTENTRY_DEBUG(exc_debug)
+{
+	ist_enter(regs);
+	handle_debug(regs);
 	ist_exit(regs);
 }
+
+#ifdef CONFIG_X86_64
+/* User entry, runs on regular task stack */
+DEFINE_IDTENTRY_DEBUG_USER(exc_debug)
+{
+	handle_debug(regs);
+}
+#endif
 
 /*
  * Note that we play around with the 'TS' bit in an attempt to get

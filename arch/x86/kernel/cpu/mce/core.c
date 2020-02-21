@@ -1898,10 +1898,21 @@ static void unexpected_machine_check(struct pt_regs *regs)
 /* Call the installed machine check handler for this CPU setup. */
 void (*machine_check_vector)(struct pt_regs *) = unexpected_machine_check;
 
+/* MCE hit kernel mode */
 DEFINE_IDTENTRY_MCE(exc_machine_check)
 {
 	machine_check_vector(regs);
 }
+
+#ifdef CONFIG_X86_64
+/*
+ * The user mode variant (same content for now).
+ */
+DEFINE_IDTENTRY_MCE_USER(exc_machine_check)
+{
+	machine_check_vector(regs);
+}
+#endif
 
 /*
  * Called for each booted CPU to set up machine checks.
