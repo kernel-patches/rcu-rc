@@ -160,10 +160,85 @@ static __always_inline void __##func(struct pt_regs *regs)
 #define DEFINE_IDTENTRY_NOIST(func)					\
 	DEFINE_IDTENTRY(noist_##func)
 
+/**
+ * DECLARE_IDTENTRY_DF - Declare functions for double fault
+ * @vector:	Vector number (ignored for C)
+ * @func:	Function name of the entry point
+ *
+ * Maps to DECLARE_IDTENTRY_ERRORCODE
+ */
+#define DECLARE_IDTENTRY_DF(vector, func)				\
+	DECLARE_IDTENTRY_ERRORCODE(vector, func)
+
+/**
+ * DEFINE_IDTENTRY_DF - Emit code for double fault
+ * @func:	Function name of the entry point
+ *
+ * @func is called from ASM entry code with interrupts disabled.
+ */
+#define DEFINE_IDTENTRY_DF(func)					\
+static __always_inline void __##func(struct pt_regs *regs,		\
+				     unsigned long error_code,		\
+				     unsigned long address);		\
+									\
+__visible notrace void func(struct pt_regs *regs,			\
+			    unsigned long error_code)			\
+{									\
+	unsigned long address = read_cr2();				\
+									\
+	trace_hardirqs_off();						\
+	__##func (regs, error_code, address);				\
+}									\
+NOKPROBE_SYMBOL(func);							\
+									\
+static __always_inline void __##func(struct pt_regs *regs,		\
+				     unsigned long error_code,		\
+				     unsigned long address)
+
 #else	/* CONFIG_X86_64 */
 /* Maps to a regular IDTENTRY on 32bit for now */
 # define DECLARE_IDTENTRY_IST		DECLARE_IDTENTRY
 # define DEFINE_IDTENTRY_IST		DEFINE_IDTENTRY
+
+/**
+ * DECLARE_IDTENTRY_DF - Declare functions for double fault 32bit variant
+ * @vector:	Vector number (ignored for C)
+ * @func:	Function name of the entry point
+ *
+ * Declares three functions:
+ * - The ASM entry point: asm_##func
+ * - The C handler called from the C shim
+ */
+#define DECLARE_IDTENTRY_DF(vector, func)				\
+	asmlinkage void asm_##func(void);				\
+	__visible void func(struct pt_regs *regs,			\
+			    unsigned long error_code,			\
+			    unsigned long address)
+
+/**
+ * DEFINE_IDTENTRY_DF - Emit code for double fault on 32bit
+ * @func:	Function name of the entry point
+ *
+ * This is called through the doublefault shim which already provides
+ * cr2 in the address argument.
+ */
+#define DEFINE_IDTENTRY_DF(func)					\
+static __always_inline void __##func(struct pt_regs *regs,		\
+				     unsigned long error_code,		\
+				     unsigned long address);		\
+									\
+__visible notrace void func(struct pt_regs *regs,			\
+			    unsigned long error_code,			\
+			    unsigned long address)			\
+{									\
+	__##func (regs, error_code, address);				\
+}									\
+NOKPROBE_SYMBOL(func);							\
+									\
+static __always_inline void __##func(struct pt_regs *regs,		\
+				     unsigned long error_code,		\
+				     unsigned long address)
+
 #endif	/* !CONFIG_X86_64 */
 
 /* C-Code mapping */
@@ -209,12 +284,19 @@ static __always_inline void __##func(struct pt_regs *regs)
 # define DECLARE_IDTENTRY_DEBUG(vector, func)			\
 	idtentry_mce_db vector asm_##func func
 
+# define DECLARE_IDTENTRY_DF(vector, func)			\
+	idtentry_df vector asm_##func func
+
 #else
 # define DECLARE_IDTENTRY_MCE(vector, func)			\
 	DECLARE_IDTENTRY(vector, func)
 
 # define DECLARE_IDTENTRY_DEBUG(vector, func)			\
 	DECLARE_IDTENTRY(vector, func)
+
+/* No ASM emitted for DF as this goes through a C shim */
+# define DECLARE_IDTENTRY_DF(vector, func)
+
 #endif
 
 /* No ASM code emitted for NMI */
