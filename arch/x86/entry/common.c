@@ -50,6 +50,18 @@ NOKPROBE_SYMBOL(enter_from_user_mode);
 static inline void enter_from_user_mode(void) {}
 #endif
 
+/*
+ * All syscall entry variants call with interrupts disabled.
+ *
+ * Invoke context tracking if enabled and enable interrupts for further
+ * processing.
+ */
+static __always_inline void syscall_entry_apply_fixups(void)
+{
+	enter_from_user_mode();
+	local_irq_enable();
+}
+
 static void do_audit_syscall_entry(struct pt_regs *regs, u32 arch)
 {
 #ifdef CONFIG_X86_64
@@ -280,13 +292,11 @@ __visible inline void syscall_return_slowpath(struct pt_regs *regs)
 }
 
 #ifdef CONFIG_X86_64
-__visible void do_syscall_64(unsigned long nr, struct pt_regs *regs)
+static __always_inline
+void do_syscall_64_irqs_on(unsigned long nr, struct pt_regs *regs)
 {
-	struct thread_info *ti;
+	struct thread_info *ti = current_thread_info();
 
-	enter_from_user_mode();
-	local_irq_enable();
-	ti = current_thread_info();
 	if (READ_ONCE(ti->flags) & _TIF_WORK_SYSCALL_ENTRY)
 		nr = syscall_trace_enter(regs);
 
@@ -303,6 +313,12 @@ __visible void do_syscall_64(unsigned long nr, struct pt_regs *regs)
 	}
 
 	syscall_return_slowpath(regs);
+}
+
+__visible void do_syscall_64(unsigned long nr, struct pt_regs *regs)
+{
+	syscall_entry_apply_fixups();
+	do_syscall_64_irqs_on(nr, regs);
 }
 #endif
 
@@ -356,19 +372,17 @@ static __always_inline void do_syscall_32_irqs_on(struct pt_regs *regs)
 /* Handles int $0x80 */
 __visible void do_int80_syscall_32(struct pt_regs *regs)
 {
-	enter_from_user_mode();
-	local_irq_enable();
+	syscall_entry_apply_fixups();
 	do_syscall_32_irqs_on(regs);
 }
 
-/* Returns 0 to return using IRET or 1 to return using SYSEXIT/SYSRETL. */
-__visible long do_fast_syscall_32(struct pt_regs *regs)
+/* Fast syscall 32bit variant */
+static __always_inline long do_fast_syscall_32_irqs_on(struct pt_regs *regs)
 {
 	/*
 	 * Called using the internal vDSO SYSENTER/SYSCALL32 calling
 	 * convention.  Adjust regs so it looks like we entered using int80.
 	 */
-
 	unsigned long landing_pad = (unsigned long)current->mm->context.vdso +
 		vdso_image_32.sym_int80_landing_pad;
 
@@ -378,10 +392,6 @@ __visible long do_fast_syscall_32(struct pt_regs *regs)
 	 * Fix it up.
 	 */
 	regs->ip = landing_pad;
-
-	enter_from_user_mode();
-
-	local_irq_enable();
 
 	/* Fetch EBP from where the vDSO stashed it. */
 	if (
@@ -438,4 +448,12 @@ __visible long do_fast_syscall_32(struct pt_regs *regs)
 		(regs->flags & (X86_EFLAGS_RF | X86_EFLAGS_TF | X86_EFLAGS_VM)) == 0;
 #endif
 }
-#endif
+
+/* Returns 0 to return using IRET or 1 to return using SYSEXIT/SYSRETL. */
+__visible long do_fast_syscall_32(struct pt_regs *regs)
+{
+	syscall_entry_apply_fixups();
+	return do_fast_syscall_32_irqs_on(regs);
+}
+
+#endif /* CONFIG_X86_32 || CONFIG_IA32_EMULATION */
