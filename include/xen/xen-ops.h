@@ -214,6 +214,7 @@ bool xen_running_on_version_or_later(unsigned int major, unsigned int minor);
 
 void xen_efi_runtime_setup(void);
 
+DECLARE_PER_CPU(bool, xen_in_preemptible_hcall);
 
 #ifdef CONFIG_PREEMPTION
 
@@ -225,9 +226,9 @@ static inline void xen_preemptible_hcall_end(void)
 {
 }
 
-#else
+static inline void xen_maybe_preempt_hcall(void) { }
 
-DECLARE_PER_CPU(bool, xen_in_preemptible_hcall);
+#else
 
 static inline void xen_preemptible_hcall_begin(void)
 {
@@ -238,6 +239,8 @@ static inline void xen_preemptible_hcall_end(void)
 {
 	__this_cpu_write(xen_in_preemptible_hcall, false);
 }
+
+void xen_maybe_preempt_hcall(void);
 
 #endif /* CONFIG_PREEMPTION */
 
