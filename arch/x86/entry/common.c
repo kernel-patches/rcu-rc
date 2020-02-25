@@ -315,11 +315,12 @@ void do_syscall_64_irqs_on(unsigned long nr, struct pt_regs *regs)
 	syscall_return_slowpath(regs);
 }
 
-__visible void do_syscall_64(unsigned long nr, struct pt_regs *regs)
+__visible notrace void do_syscall_64(unsigned long nr, struct pt_regs *regs)
 {
 	syscall_entry_apply_fixups();
 	do_syscall_64_irqs_on(nr, regs);
 }
+NOKPROBE_SYMBOL(do_syscall_64);
 #endif
 
 #if defined(CONFIG_X86_32) || defined(CONFIG_IA32_EMULATION)
@@ -370,11 +371,12 @@ static __always_inline void do_syscall_32_irqs_on(struct pt_regs *regs)
 }
 
 /* Handles int $0x80 */
-__visible void do_int80_syscall_32(struct pt_regs *regs)
+__visible notrace void do_int80_syscall_32(struct pt_regs *regs)
 {
 	syscall_entry_apply_fixups();
 	do_syscall_32_irqs_on(regs);
 }
+NOKPROBE_SYMBOL(do_int80_syscall_32);
 
 /* Fast syscall 32bit variant */
 static __always_inline long do_fast_syscall_32_irqs_on(struct pt_regs *regs)
@@ -450,10 +452,11 @@ static __always_inline long do_fast_syscall_32_irqs_on(struct pt_regs *regs)
 }
 
 /* Returns 0 to return using IRET or 1 to return using SYSEXIT/SYSRETL. */
-__visible long do_fast_syscall_32(struct pt_regs *regs)
+__visible notrace long do_fast_syscall_32(struct pt_regs *regs)
 {
 	syscall_entry_apply_fixups();
 	return do_fast_syscall_32_irqs_on(regs);
 }
+NOKPROBE_SYMBOL(do_fast_syscall_32);
 
 #endif /* CONFIG_X86_32 || CONFIG_IA32_EMULATION */
