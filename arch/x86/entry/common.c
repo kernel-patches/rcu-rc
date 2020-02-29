@@ -40,11 +40,12 @@
 
 #ifdef CONFIG_CONTEXT_TRACKING
 /* Called on entry from user mode with IRQs off. */
-__visible inline void enter_from_user_mode(void)
+__visible inline notrace void enter_from_user_mode(void)
 {
 	CT_WARN_ON(ct_state() != CONTEXT_USER);
 	user_exit_irqoff();
 }
+NOKPROBE_SYMBOL(enter_from_user_mode);
 #else
 static inline void enter_from_user_mode(void) {}
 #endif
