@@ -29,6 +29,8 @@
 #endif
 
 #ifdef CONFIG_TRACE_IRQFLAGS
+  extern void __trace_hardirqs_on(void);
+  extern void __trace_hardirqs_off(void);
   extern void trace_hardirqs_on(void);
   extern void trace_hardirqs_off(void);
 # define trace_hardirq_context(p)	((p)->hardirq_context)
@@ -52,6 +54,8 @@ do {						\
 	current->softirq_context--;		\
 } while (0)
 #else
+# define __trace_hardirqs_on()		do { } while (0)
+# define __trace_hardirqs_off()		do { } while (0)
 # define trace_hardirqs_on()		do { } while (0)
 # define trace_hardirqs_off()		do { } while (0)
 # define trace_hardirq_context(p)	0
