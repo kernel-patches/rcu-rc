@@ -31,7 +31,7 @@ EXPORT_SYMBOL_GPL(context_tracking_key);
 DEFINE_PER_CPU(struct context_tracking, context_tracking);
 EXPORT_SYMBOL_GPL(context_tracking);
 
-static bool context_tracking_recursion_enter(void)
+static notrace bool context_tracking_recursion_enter(void)
 {
 	int recursion;
 
@@ -44,8 +44,9 @@ static bool context_tracking_recursion_enter(void)
 
 	return false;
 }
+NOKPROBE_SYMBOL(context_tracking_recursion_enter);
 
-static void context_tracking_recursion_exit(void)
+static __always_inline void context_tracking_recursion_exit(void)
 {
 	__this_cpu_dec(context_tracking.recursion);
 }
@@ -59,7 +60,7 @@ static void context_tracking_recursion_exit(void)
  * instructions to execute won't use any RCU read side critical section
  * because this function sets RCU in extended quiescent state.
  */
-void __context_tracking_enter(enum ctx_state state)
+void notrace __context_tracking_enter(enum ctx_state state)
 {
 	/* Kernel threads aren't supposed to go to userspace */
 	WARN_ON_ONCE(!current->mm);
@@ -142,7 +143,7 @@ NOKPROBE_SYMBOL(context_tracking_user_enter);
  * This call supports re-entrancy. This way it can be called from any exception
  * handler without needing to know if we came from userspace or not.
  */
-void __context_tracking_exit(enum ctx_state state)
+void notrace __context_tracking_exit(enum ctx_state state)
 {
 	if (!context_tracking_recursion_enter())
 		return;
