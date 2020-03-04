@@ -251,9 +251,19 @@ __visible inline notrace void prepare_exit_to_usermode(struct pt_regs *regs)
 {
 	__prepare_exit_to_usermode(regs);
 
+	/*
+	 * Return to user space enables interrupts. Tell the tracer before
+	 * invoking user_enter_irqsoff() which switches to CONTEXT_USER and
+	 * RCU to rcuidle state. Lockdep still needs to keep the irqs
+	 * disabled state.
+	 */
+	__trace_hardirqs_on();
+
 	user_enter_irqoff();
 	mds_user_clear_cpu_buffers();
-	trace_hardirqs_on();
+
+	/* All done. Tell lockdep as well. */
+	lockdep_hardirqs_on(CALLER_ADDR0);
 }
 NOKPROBE_SYMBOL(prepare_exit_to_usermode);
 
