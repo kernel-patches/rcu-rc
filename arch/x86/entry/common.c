@@ -60,10 +60,19 @@ static __always_inline void syscall_entry_apply_fixups(void)
 {
 	/*
 	 * Usermode is traced as interrupts enabled, but the syscall entry
-	 * mechanisms disable interrupts. Tell the tracer.
+	 * mechanisms disable interrupts. Tell lockdep before calling
+	 * enter_from_user_mode(). This is safe vs. RCU while the
+	 * tracepoint is not.
 	 */
-	trace_hardirqs_off();
+	lockdep_hardirqs_on(CALLER_ADDR0);
+
 	enter_from_user_mode();
+
+	/*
+	 * Tell the tracer about the irq state as well before enabling
+	 * interrupts.
+	 */
+	__trace_hardirqs_off();
 	local_irq_enable();
 }
 
