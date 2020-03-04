@@ -71,10 +71,27 @@ static __always_inline void enter_from_user_mode(void)
 }
 #endif
 
+/**
+ * exit_to_user_mode - Fixup state when exiting to user mode
+ *
+ * Syscall exit enables interrupts, but the kernel state is interrupts
+ * disabled when this is invoked. Also tell RCU about it.
+ *
+ * 1) Trace interrupts on state
+ * 2) Invoke context tracking if enabled to adjust RCU state
+ * 3) Clear CPU buffers if CPU is affected by MDS and the migitation is on.
+ * 4) Tell lockdep that interrupts are enabled
+ */
 static __always_inline void exit_to_user_mode(void)
 {
+	instr_begin();
+	__trace_hardirqs_on();
+	lockdep_hardirqs_on_prepare(CALLER_ADDR0);
+	instr_end();
+
 	user_enter_irqoff();
 	mds_user_clear_cpu_buffers();
+	lockdep_hardirqs_on(CALLER_ADDR0);
 }
 
 static void do_audit_syscall_entry(struct pt_regs *regs, u32 arch)
