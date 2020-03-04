@@ -206,7 +206,7 @@ static void exit_to_usermode_loop(struct pt_regs *regs, u32 cached_flags)
 }
 
 /* Called with IRQs disabled. */
-__visible inline void prepare_exit_to_usermode(struct pt_regs *regs)
+static noinline void __prepare_exit_to_usermode(struct pt_regs *regs)
 {
 	struct thread_info *ti = current_thread_info();
 	u32 cached_flags;
@@ -245,11 +245,16 @@ __visible inline void prepare_exit_to_usermode(struct pt_regs *regs)
 	 */
 	ti->status &= ~(TS_COMPAT|TS_I386_REGS_POKED);
 #endif
+}
+
+__visible inline notrace void prepare_exit_to_usermode(struct pt_regs *regs)
+{
+	__prepare_exit_to_usermode(regs);
 
 	user_enter_irqoff();
-
 	mds_user_clear_cpu_buffers();
 }
+NOKPROBE_SYMBOL(prepare_exit_to_usermode);
 
 #define SYSCALL_EXIT_WORK_FLAGS				\
 	(_TIF_SYSCALL_TRACE | _TIF_SYSCALL_AUDIT |	\
@@ -277,11 +282,7 @@ static void syscall_slow_exit_work(struct pt_regs *regs, u32 cached_flags)
 		tracehook_report_syscall_exit(regs, step);
 }
 
-/*
- * Called with IRQs on and fully valid regs.  Returns with IRQs off in a
- * state such that we can immediately switch to user mode.
- */
-__visible inline void syscall_return_slowpath(struct pt_regs *regs)
+static void __syscall_return_slowpath(struct pt_regs *regs)
 {
 	struct thread_info *ti = current_thread_info();
 	u32 cached_flags = READ_ONCE(ti->flags);
@@ -302,8 +303,18 @@ __visible inline void syscall_return_slowpath(struct pt_regs *regs)
 		syscall_slow_exit_work(regs, cached_flags);
 
 	local_irq_disable();
+}
+
+/*
+ * Called with IRQs on and fully valid regs.  Returns with IRQs off in a
+ * state such that we can immediately switch to user mode.
+ */
+__visible inline notrace void syscall_return_slowpath(struct pt_regs *regs)
+{
+	__syscall_return_slowpath(regs);
 	prepare_exit_to_usermode(regs);
 }
+NOKPROBE_SYMBOL(syscall_return_slowpath);
 
 #ifdef CONFIG_X86_64
 static __always_inline
