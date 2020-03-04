@@ -253,6 +253,7 @@ __visible inline notrace void prepare_exit_to_usermode(struct pt_regs *regs)
 
 	user_enter_irqoff();
 	mds_user_clear_cpu_buffers();
+	trace_hardirqs_on();
 }
 NOKPROBE_SYMBOL(prepare_exit_to_usermode);
 
