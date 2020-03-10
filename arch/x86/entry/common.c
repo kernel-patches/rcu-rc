@@ -42,12 +42,23 @@
 /* Called on entry from user mode with IRQs off. */
 __visible noinstr void enter_from_user_mode(void)
 {
-	CT_WARN_ON(ct_state() != CONTEXT_USER);
+	enum ctx_state state = ct_state();
+
 	user_exit_irqoff();
+
+	instr_begin();
+	CT_WARN_ON(state != CONTEXT_USER);
+	instr_end();
 }
 #else
 static inline void enter_from_user_mode(void) {}
 #endif
+
+static __always_inline void exit_to_user_mode(void)
+{
+	user_enter_irqoff();
+	mds_user_clear_cpu_buffers();
+}
 
 static void do_audit_syscall_entry(struct pt_regs *regs, u32 arch)
 {
@@ -178,8 +189,7 @@ static void exit_to_usermode_loop(struct pt_regs *regs, u32 cached_flags)
 	}
 }
 
-/* Called with IRQs disabled. */
-__visible inline void prepare_exit_to_usermode(struct pt_regs *regs)
+static void __prepare_exit_to_usermode(struct pt_regs *regs)
 {
 	struct thread_info *ti = current_thread_info();
 	u32 cached_flags;
@@ -218,10 +228,14 @@ __visible inline void prepare_exit_to_usermode(struct pt_regs *regs)
 	 */
 	ti->status &= ~(TS_COMPAT|TS_I386_REGS_POKED);
 #endif
+}
 
-	user_enter_irqoff();
-
-	mds_user_clear_cpu_buffers();
+__visible noinstr void prepare_exit_to_usermode(struct pt_regs *regs)
+{
+	instr_begin();
+	__prepare_exit_to_usermode(regs);
+	instr_end();
+	exit_to_user_mode();
 }
 
 #define SYSCALL_EXIT_WORK_FLAGS				\
@@ -250,11 +264,7 @@ static void syscall_slow_exit_work(struct pt_regs *regs, u32 cached_flags)
 		tracehook_report_syscall_exit(regs, step);
 }
 
-/*
- * Called with IRQs on and fully valid regs.  Returns with IRQs off in a
- * state such that we can immediately switch to user mode.
- */
-__visible inline void syscall_return_slowpath(struct pt_regs *regs)
+static void __syscall_return_slowpath(struct pt_regs *regs)
 {
 	struct thread_info *ti = current_thread_info();
 	u32 cached_flags = READ_ONCE(ti->flags);
@@ -275,15 +285,29 @@ __visible inline void syscall_return_slowpath(struct pt_regs *regs)
 		syscall_slow_exit_work(regs, cached_flags);
 
 	local_irq_disable();
-	prepare_exit_to_usermode(regs);
+	__prepare_exit_to_usermode(regs);
+}
+
+/*
+ * Called with IRQs on and fully valid regs.  Returns with IRQs off in a
+ * state such that we can immediately switch to user mode.
+ */
+__visible noinstr void syscall_return_slowpath(struct pt_regs *regs)
+{
+	instr_begin();
+	__syscall_return_slowpath(regs);
+	instr_end();
+	exit_to_user_mode();
 }
 
 #ifdef CONFIG_X86_64
-__visible void do_syscall_64(unsigned long nr, struct pt_regs *regs)
+__visible noinstr void do_syscall_64(unsigned long nr, struct pt_regs *regs)
 {
 	struct thread_info *ti;
 
 	enter_from_user_mode();
+	instr_begin();
+
 	local_irq_enable();
 	ti = current_thread_info();
 	if (READ_ONCE(ti->flags) & _TIF_WORK_SYSCALL_ENTRY)
@@ -300,8 +324,10 @@ __visible void do_syscall_64(unsigned long nr, struct pt_regs *regs)
 		regs->ax = x32_sys_call_table[nr](regs);
 #endif
 	}
+	__syscall_return_slowpath(regs);
 
-	syscall_return_slowpath(regs);
+	instr_end();
+	exit_to_user_mode();
 }
 #endif
 
@@ -309,10 +335,10 @@ __visible void do_syscall_64(unsigned long nr, struct pt_regs *regs)
 /*
  * Does a 32-bit syscall.  Called with IRQs on in CONTEXT_KERNEL.  Does
  * all entry and exit work and returns with IRQs off.  This function is
- * extremely hot in workloads that use it, and it's usually called from
+ * ex2tremely hot in workloads that use it, and it's usually called from
  * do_fast_syscall_32, so forcibly inline it to improve performance.
  */
-static __always_inline void do_syscall_32_irqs_on(struct pt_regs *regs)
+static void do_syscall_32_irqs_on(struct pt_regs *regs)
 {
 	struct thread_info *ti = current_thread_info();
 	unsigned int nr = (unsigned int)regs->orig_ax;
@@ -349,27 +375,62 @@ static __always_inline void do_syscall_32_irqs_on(struct pt_regs *regs)
 #endif /* CONFIG_IA32_EMULATION */
 	}
 
-	syscall_return_slowpath(regs);
+	__syscall_return_slowpath(regs);
 }
 
 /* Handles int $0x80 */
-__visible void do_int80_syscall_32(struct pt_regs *regs)
+__visible noinstr void do_int80_syscall_32(struct pt_regs *regs)
 {
 	enter_from_user_mode();
+	instr_begin();
+
 	local_irq_enable();
 	do_syscall_32_irqs_on(regs);
+
+	instr_end();
+	exit_to_user_mode();
+}
+
+static bool __do_fast_syscall_32(struct pt_regs *regs)
+{
+	int res;
+
+	/* Fetch EBP from where the vDSO stashed it. */
+	if (IS_ENABLED(CONFIG_X86_64)) {
+		/*
+		 * Micro-optimization: the pointer we're following is
+		 * explicitly 32 bits, so it can't be out of range.
+		 */
+		res = __get_user(*(u32 *)&regs->bp,
+			 (u32 __user __force *)(unsigned long)(u32)regs->sp);
+	} else {
+		res = get_user(*(u32 *)&regs->bp,
+		       (u32 __user __force *)(unsigned long)(u32)regs->sp);
+	}
+
+	if (res) {
+		/* User code screwed up. */
+		regs->ax = -EFAULT;
+		local_irq_disable();
+		__prepare_exit_to_usermode(regs);
+		return false;
+	}
+
+	/* Now this is just like a normal syscall. */
+	do_syscall_32_irqs_on(regs);
+	return true;
 }
 
 /* Returns 0 to return using IRET or 1 to return using SYSEXIT/SYSRETL. */
-__visible long do_fast_syscall_32(struct pt_regs *regs)
+__visible noinstr long do_fast_syscall_32(struct pt_regs *regs)
 {
 	/*
 	 * Called using the internal vDSO SYSENTER/SYSCALL32 calling
 	 * convention.  Adjust regs so it looks like we entered using int80.
 	 */
-
 	unsigned long landing_pad = (unsigned long)current->mm->context.vdso +
-		vdso_image_32.sym_int80_landing_pad;
+					vdso_image_32.sym_int80_landing_pad;
+	bool success;
 
 	/*
 	 * SYSENTER loses EIP, and even SYSCALL32 needs us to skip forward
@@ -379,33 +440,17 @@ __visible long do_fast_syscall_32(struct pt_regs *regs)
 	regs->ip = landing_pad;
 
 	enter_from_user_mode();
+	instr_begin();
 
 	local_irq_enable();
+	success = __do_fast_syscall_32(regs);
 
-	/* Fetch EBP from where the vDSO stashed it. */
-	if (
-#ifdef CONFIG_X86_64
-		/*
-		 * Micro-optimization: the pointer we're following is explicitly
-		 * 32 bits, so it can't be out of range.
-		 */
-		__get_user(*(u32 *)&regs->bp,
-			    (u32 __user __force *)(unsigned long)(u32)regs->sp)
-#else
-		get_user(*(u32 *)&regs->bp,
-			 (u32 __user __force *)(unsigned long)(u32)regs->sp)
-#endif
-		) {
+	instr_end();
+	exit_to_user_mode();
 
-		/* User code screwed up. */
-		local_irq_disable();
-		regs->ax = -EFAULT;
-		prepare_exit_to_usermode(regs);
-		return 0;	/* Keep it simple: use IRET. */
-	}
-
-	/* Now this is just like a normal syscall. */
-	do_syscall_32_irqs_on(regs);
+	/* If it failed, keep it simple: use IRET. */
+	if (!success)
+		return 0;
 
 #ifdef CONFIG_X86_64
 	/*
