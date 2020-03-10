@@ -1443,9 +1443,20 @@ static bool __within_kprobe_blacklist(unsigned long addr)
 	return false;
 }
 
+/* Functions in .noinstr.text must not be probed */
+static bool within_noinstr_text(unsigned long addr)
+{
+	/* FIXME: Handle module .noinstr.text */
+	return addr >= (unsigned long)__noinstr_text_start &&
+	       addr < (unsigned long)__noinstr_text_end;
+}
+
 bool within_kprobe_blacklist(unsigned long addr)
 {
 	char symname[KSYM_NAME_LEN], *p;
+
+	if (within_noinstr_text(addr))
+		return true;
 
 	if (__within_kprobe_blacklist(addr))
 		return true;
