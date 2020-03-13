@@ -70,13 +70,16 @@ do {									\
 #define HAVE_ARCH_BUG
 #define BUG()							\
 do {								\
+	instrumentation_begin();				\
 	_BUG_FLAGS(ASM_UD2, 0);					\
 	unreachable();						\
 } while (0)
 
 #define __WARN_FLAGS(flags)					\
 do {								\
+	instrumentation_begin();				\
 	_BUG_FLAGS(ASM_UD2, BUGFLAG_WARNING|(flags));		\
+	instrumentation_end();					\
 	annotate_reachable();					\
 } while (0)
 
