@@ -9,10 +9,28 @@
 #include "calling.h"
 #include <asm/asm.h>
 #include <asm/export.h>
+#include <asm/irqflags.h>
+
+.code64
 
 	/* rdi:	arg1 ... normal C conventions. rax is saved/restored. */
-	.macro THUNK name, func, put_ret_addr_in_rdi=0
+	.macro THUNK name, func, put_ret_addr_in_rdi=0, check_if=0
 SYM_FUNC_START_NOALIGN(\name)
+
+	.if \check_if
+	/*
+	 * Check for interrupts disabled right here. No point in
+	 * going all the way down
+	 */
+	pushq	%rax
+	SAVE_FLAGS(CLBR_RAX)
+	testl	$X86_EFLAGS_IF, %eax
+	popq	%rax
+	jnz	1f
+	ret
+1:
+	.endif
+
 	pushq %rbp
 	movq %rsp, %rbp
 
@@ -38,8 +56,8 @@ SYM_FUNC_END(\name)
 	.endm
 
 #ifdef CONFIG_TRACE_IRQFLAGS
-	THUNK trace_hardirqs_on_thunk,trace_hardirqs_on_caller,1
-	THUNK trace_hardirqs_off_thunk,trace_hardirqs_off_caller,1
+	THUNK trace_hardirqs_on_thunk,trace_hardirqs_on_caller, put_ret_addr_in_rdi=1
+	THUNK trace_hardirqs_off_thunk,trace_hardirqs_off_caller, put_ret_addr_in_rdi=1
 #endif
 
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
@@ -48,8 +66,9 @@ SYM_FUNC_END(\name)
 
 #ifdef CONFIG_PREEMPTION
 	THUNK ___preempt_schedule, preempt_schedule
-	THUNK ___preempt_schedule_notrace, preempt_schedule_notrace
 	EXPORT_SYMBOL(___preempt_schedule)
+
+	THUNK ___preempt_schedule_notrace, preempt_schedule_notrace, check_if=1
 	EXPORT_SYMBOL(___preempt_schedule_notrace)
 #endif
 
