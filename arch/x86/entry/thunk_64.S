@@ -49,7 +49,22 @@ SYM_FUNC_START_NOALIGN(\name)
 	movq 8(%rbp), %rdi
 	.endif
 
+	.if \check_if
+1:
+	.pushsection .discard.instr_begin
+	.long 1b - .
+	.popsection
+
 	call \func
+2:
+	.pushsection .discard.instr_end
+	.long 2b - .
+	.popsection
+
+	.else
+	call \func
+	.endif
+
 	jmp  .L_restore
 SYM_FUNC_END(\name)
 	_ASM_NOKPROBE(\name)
@@ -68,13 +83,16 @@ SYM_FUNC_END(\name)
 	THUNK ___preempt_schedule, preempt_schedule
 	EXPORT_SYMBOL(___preempt_schedule)
 
+.pushsection .noinstr.text, "ax"
 	THUNK ___preempt_schedule_notrace, preempt_schedule_notrace, check_if=1
+.popsection
 	EXPORT_SYMBOL(___preempt_schedule_notrace)
 #endif
 
 #if defined(CONFIG_TRACE_IRQFLAGS) \
  || defined(CONFIG_DEBUG_LOCK_ALLOC) \
  || defined(CONFIG_PREEMPTION)
+.section .noinstr.text, "ax"
 SYM_CODE_START_LOCAL_NOALIGN(.L_restore)
 	popq %r11
 	popq %r10
