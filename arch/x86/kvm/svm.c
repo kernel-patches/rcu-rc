@@ -5714,58 +5714,9 @@ static void svm_cancel_injection(struct kvm_vcpu *vcpu)
 	svm_complete_interrupts(svm);
 }
 
-static void svm_vcpu_run(struct kvm_vcpu *vcpu)
+static noinstr void svm_vcpu_enter_exit(struct kvm_vcpu *vcpu,
+					struct vcpu_svm *svm)
 {
-	struct vcpu_svm *svm = to_svm(vcpu);
-
-	svm->vmcb->save.rax = vcpu->arch.regs[VCPU_REGS_RAX];
-	svm->vmcb->save.rsp = vcpu->arch.regs[VCPU_REGS_RSP];
-	svm->vmcb->save.rip = vcpu->arch.regs[VCPU_REGS_RIP];
-
-	/*
-	 * A vmexit emulation is required before the vcpu can be executed
-	 * again.
-	 */
-	if (unlikely(svm->nested.exit_required))
-		return;
-
-	/*
-	 * Disable singlestep if we're injecting an interrupt/exception.
-	 * We don't want our modified rflags to be pushed on the stack where
-	 * we might not be able to easily reset them if we disabled NMI
-	 * singlestep later.
-	 */
-	if (svm->nmi_singlestep && svm->vmcb->control.event_inj) {
-		/*
-		 * Event injection happens before external interrupts cause a
-		 * vmexit and interrupts are disabled here, so smp_send_reschedule
-		 * is enough to force an immediate vmexit.
-		 */
-		disable_nmi_singlestep(svm);
-		smp_send_reschedule(vcpu->cpu);
-	}
-
-	pre_svm_run(svm);
-
-	sync_lapic_to_cr8(vcpu);
-
-	svm->vmcb->save.cr2 = vcpu->arch.cr2;
-
-	clgi();
-	kvm_load_guest_xsave_state(vcpu);
-
-	if (lapic_in_kernel(vcpu) &&
-		vcpu->arch.apic->lapic_timer.timer_advance_ns)
-		kvm_wait_lapic_expire(vcpu);
-
-	/*
-	 * If this vCPU has touched SPEC_CTRL, restore the guest's value if
-	 * it's non-zero. Since vmentry is serialising on affected CPUs, there
-	 * is no need to worry about the conditional branch over the wrmsr
-	 * being speculatively taken.
-	 */
-	x86_spec_ctrl_set_guest(svm->spec_ctrl, svm->virt_spec_ctrl);
-
 	/*
 	 * VMENTER enables interrupts (host state), but the kernel state is
 	 * interrupts disabled when this is invoked. Also tell RCU about
@@ -5780,8 +5731,10 @@ static void svm_vcpu_run(struct kvm_vcpu *vcpu)
 	 * take locks (lockdep needs RCU) and calls into world and some
 	 * more.
 	 */
+	instr_begin();
 	__trace_hardirqs_on();
 	lockdep_hardirqs_on_prepare(CALLER_ADDR0);
+	instr_end();
 	guest_enter_irqoff();
 	lockdep_hardirqs_on(CALLER_ADDR0);
 
@@ -5881,7 +5834,7 @@ static void svm_vcpu_run(struct kvm_vcpu *vcpu)
 	vmexit_fill_RSB();
 
 #ifdef CONFIG_X86_64
-	wrmsrl(MSR_GS_BASE, svm->host.gs_base);
+	native_wrmsrl(MSR_GS_BASE, svm->host.gs_base);
 #else
 	loadsegment(fs, svm->host.fs);
 #ifndef CONFIG_X86_32_LAZY_GS
@@ -5904,7 +5857,64 @@ static void svm_vcpu_run(struct kvm_vcpu *vcpu)
 	 */
 	lockdep_hardirqs_off(CALLER_ADDR0);
 	guest_exit_irqoff();
+	instr_begin();
 	__trace_hardirqs_off();
+	instr_end();
+}
+
+static void svm_vcpu_run(struct kvm_vcpu *vcpu)
+{
+	struct vcpu_svm *svm = to_svm(vcpu);
+
+	svm->vmcb->save.rax = vcpu->arch.regs[VCPU_REGS_RAX];
+	svm->vmcb->save.rsp = vcpu->arch.regs[VCPU_REGS_RSP];
+	svm->vmcb->save.rip = vcpu->arch.regs[VCPU_REGS_RIP];
+
+	/*
+	 * A vmexit emulation is required before the vcpu can be executed
+	 * again.
+	 */
+	if (unlikely(svm->nested.exit_required))
+		return;
+
+	/*
+	 * Disable singlestep if we're injecting an interrupt/exception.
+	 * We don't want our modified rflags to be pushed on the stack where
+	 * we might not be able to easily reset them if we disabled NMI
+	 * singlestep later.
+	 */
+	if (svm->nmi_singlestep && svm->vmcb->control.event_inj) {
+		/*
+		 * Event injection happens before external interrupts cause a
+		 * vmexit and interrupts are disabled here, so smp_send_reschedule
+		 * is enough to force an immediate vmexit.
+		 */
+		disable_nmi_singlestep(svm);
+		smp_send_reschedule(vcpu->cpu);
+	}
+
+	pre_svm_run(svm);
+
+	sync_lapic_to_cr8(vcpu);
+
+	svm->vmcb->save.cr2 = vcpu->arch.cr2;
+
+	clgi();
+	kvm_load_guest_xsave_state(vcpu);
+
+	if (lapic_in_kernel(vcpu) &&
+		vcpu->arch.apic->lapic_timer.timer_advance_ns)
+		kvm_wait_lapic_expire(vcpu);
+
+	/*
+	 * If this vCPU has touched SPEC_CTRL, restore the guest's value if
+	 * it's non-zero. Since vmentry is serialising on affected CPUs, there
+	 * is no need to worry about the conditional branch over the wrmsr
+	 * being speculatively taken.
+	 */
+	x86_spec_ctrl_set_guest(svm->spec_ctrl, svm->virt_spec_ctrl);
+
+	svm_vcpu_enter_exit(vcpu, svm);
 
 	/*
 	 * We do not use IBRS in the kernel. If this vCPU has used the
