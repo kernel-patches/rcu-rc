@@ -5767,17 +5767,26 @@ static void svm_vcpu_run(struct kvm_vcpu *vcpu)
 	x86_spec_ctrl_set_guest(svm->spec_ctrl, svm->virt_spec_ctrl);
 
 	/*
-	 * Tell context tracking that this CPU is about to enter guest
-	 * mode. This has to be after x86_spec_ctrl_set_guest() because
-	 * that can take locks (lockdep needs RCU) and calls into world and
-	 * some more.
+	 * VMENTER enables interrupts (host state), but the kernel state is
+	 * interrupts disabled when this is invoked. Also tell RCU about
+	 * it. This is the same logic as for exit_to_user_mode().
+	 *
+	 * 1) Trace interrupts on state
+	 * 2) Prepare lockdep with RCU on
+	 * 3) Invoke context tracking if enabled to adjust RCU state
+	 * 4) Tell lockdep that interrupts are enabled
+	 *
+	 * This has to be after x86_spec_ctrl_set_guest() because that can
+	 * take locks (lockdep needs RCU) and calls into world and some
+	 * more.
 	 */
+	__trace_hardirqs_on();
+	lockdep_hardirqs_on_prepare(CALLER_ADDR0);
 	guest_enter_irqoff();
-
-	/* This is wrong vs. lockdep. Will be fixed in the next step */
-	local_irq_enable();
+	lockdep_hardirqs_on(CALLER_ADDR0);
 
 	asm volatile (
+		"sti \n\t"
 		"push %%" _ASM_BP "; \n\t"
 		"mov %c[rbx](%[svm]), %%" _ASM_BX " \n\t"
 		"mov %c[rcx](%[svm]), %%" _ASM_CX " \n\t"
@@ -5838,7 +5847,8 @@ static void svm_vcpu_run(struct kvm_vcpu *vcpu)
 		"xor %%edx, %%edx \n\t"
 		"xor %%esi, %%esi \n\t"
 		"xor %%edi, %%edi \n\t"
-		"pop %%" _ASM_BP
+		"pop %%" _ASM_BP "\n\t"
+		"cli \n\t"
 		:
 		: [svm]"a"(svm),
 		  [vmcb]"i"(offsetof(struct vcpu_svm, vmcb_pa)),
@@ -5878,14 +5888,23 @@ static void svm_vcpu_run(struct kvm_vcpu *vcpu)
 	loadsegment(gs, svm->host.gs);
 #endif
 #endif
+
 	/*
-	 * Tell context tracking that this CPU is back.
+	 * VMEXIT disables interrupts (host state, see the CLI in the ASM
+	 * above), but tracing and lockdep have them in state 'on'. Same as
+	 * enter_from_user_mode().
+	 *
+	 * 1) Tell lockdep that interrupts are disabled
+	 * 2) Invoke context tracking if enabled to reactivate RCU
+	 * 3) Trace interrupts off state
 	 *
 	 * This needs to be done before the below as native_read_msr()
 	 * contains a tracepoint and x86_spec_ctrl_restore_host() calls
 	 * into world and some more.
 	 */
+	lockdep_hardirqs_off(CALLER_ADDR0);
 	guest_exit_irqoff();
+	__trace_hardirqs_off();
 
 	/*
 	 * We do not use IBRS in the kernel. If this vCPU has used the
@@ -5906,9 +5925,6 @@ static void svm_vcpu_run(struct kvm_vcpu *vcpu)
 		svm->spec_ctrl = native_read_msr(MSR_IA32_SPEC_CTRL);
 
 	reload_tss(vcpu);
-
-	/* This is wrong vs. lockdep. Will be fixed in the next step */
-	local_irq_disable();
 
 	x86_spec_ctrl_restore_host(svm->spec_ctrl, svm->virt_spec_ctrl);
 
