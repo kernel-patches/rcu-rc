@@ -79,3 +79,11 @@ void do_softirq_own_stack(void)
 	else
 		run_on_irqstack(__do_softirq, NULL);
 }
+
+void handle_irq(struct irq_desc *desc, struct pt_regs *regs)
+{
+	if (!irq_needs_irq_stack(regs))
+		generic_handle_irq_desc(desc);
+	else
+		run_on_irqstack(desc->handle_irq, desc);
+}
