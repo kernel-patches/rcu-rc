@@ -334,6 +334,7 @@ static noinstr void default_do_nmi(struct pt_regs *regs)
 	__this_cpu_write(last_nmi_rip, regs->ip);
 
 	instrumentation_begin();
+	ftrace_nmi_enter();
 
 	handled = nmi_handle(NMI_LOCAL, regs);
 	__this_cpu_add(nmi_stats.normal, handled);
@@ -420,6 +421,7 @@ static noinstr void default_do_nmi(struct pt_regs *regs)
 		unknown_nmi_error(reason, regs);
 
 out:
+	ftrace_nmi_exit();
 	instrumentation_end();
 }
 
@@ -536,14 +538,14 @@ nmi_restart:
 	}
 #endif
 
-	nmi_enter();
+	nmi_enter_notrace();
 
 	inc_irq_stat(__nmi_count);
 
 	if (!ignore_nmis)
 		default_do_nmi(regs);
 
-	nmi_exit();
+	nmi_exit_notrace();
 
 #ifdef CONFIG_X86_64
 	if (unlikely(this_cpu_read(update_debug_stack))) {

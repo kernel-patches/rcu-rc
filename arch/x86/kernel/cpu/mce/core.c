@@ -1916,7 +1916,7 @@ static __always_inline void exc_machine_check_kernel(struct pt_regs *regs)
 	    mce_check_crashing_cpu())
 		return;
 
-	nmi_enter();
+	nmi_enter_notrace();
 	/*
 	 * The call targets are marked noinstr, but objtool can't figure
 	 * that out because it's an indirect call. Annotate it.
@@ -1924,7 +1924,7 @@ static __always_inline void exc_machine_check_kernel(struct pt_regs *regs)
 	instrumentation_begin();
 	machine_check_vector(regs);
 	instrumentation_end();
-	nmi_exit();
+	nmi_exit_notrace();
 }
 
 static __always_inline void exc_machine_check_user(struct pt_regs *regs)
