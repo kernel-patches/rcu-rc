@@ -77,28 +77,38 @@ extern void irq_exit(void);
 /*
  * nmi_enter() can nest up to 15 times; see NMI_BITS.
  */
-#define nmi_enter()						\
+#define nmi_enter_notrace()					\
 	do {							\
 		arch_nmi_enter();				\
 		printk_nmi_enter();				\
 		lockdep_off();					\
-		ftrace_nmi_enter();				\
 		BUG_ON(in_nmi() == NMI_MASK);			\
 		__preempt_count_add(NMI_OFFSET + HARDIRQ_OFFSET);	\
 		rcu_nmi_enter();				\
 		lockdep_hardirq_enter();			\
 	} while (0)
 
-#define nmi_exit()						\
+#define nmi_enter()						\
+	do {							\
+		nmi_enter_notrace();				\
+		ftrace_nmi_enter();				\
+	} while (0)
+
+#define nmi_exit_notrace()					\
 	do {							\
 		lockdep_hardirq_exit();				\
 		rcu_nmi_exit();					\
 		BUG_ON(!in_nmi());				\
 		__preempt_count_sub(NMI_OFFSET + HARDIRQ_OFFSET);	\
-		ftrace_nmi_exit();				\
 		lockdep_on();					\
 		printk_nmi_exit();				\
 		arch_nmi_exit();				\
+	} while (0)
+
+#define nmi_exit()						\
+	do {							\
+		ftrace_nmi_exit();				\
+		nmi_exit_notrace();				\
 	} while (0)
 
 #endif /* LINUX_HARDIRQ_H */
