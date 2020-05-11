@@ -76,8 +76,16 @@ extern void irq_exit(void);
 
 /*
  * nmi_enter() can nest up to 15 times; see NMI_BITS.
+ *
+ * ftrace_count_nmi() only increments a counter and is noinstr safe so it
+ * can be invoked in nmi_enter_notrace(). ftrace_nmi_handler_enter/exit()
+ * does time stamping and will be invoked in the actual NMI handling after
+ * an instrumentable section has been reached.
+ *
+ * nmi_enter/exit() still calls into the tracer so existing callers
+ * wont break.
  */
-#define nmi_enter()						\
+#define nmi_enter_notrace()					\
 	do {							\
 		arch_nmi_enter();				\
 		printk_nmi_enter();				\
@@ -87,10 +95,15 @@ extern void irq_exit(void);
 		rcu_nmi_enter();				\
 		lockdep_hardirq_enter();			\
 		ftrace_count_nmi();				\
+	} while (0)
+
+#define nmi_enter()						\
+	do {							\
+		nmi_enter_notrace();				\
 		ftrace_nmi_handler_enter();			\
 	} while (0)
 
-#define nmi_exit()						\
+#define nmi_exit_notrace()					\
 	do {							\
 		ftrace_nmi_handler_exit();			\
 		lockdep_hardirq_exit();				\
@@ -100,6 +113,12 @@ extern void irq_exit(void);
 		lockdep_on();					\
 		printk_nmi_exit();				\
 		arch_nmi_exit();				\
+	} while (0)
+
+#define nmi_exit()						\
+	do {							\
+		ftrace_nmi_handler_exit();			\
+		nmi_exit_notrace();				\
 	} while (0)
 
 #endif /* LINUX_HARDIRQ_H */
