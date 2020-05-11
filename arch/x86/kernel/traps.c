@@ -387,7 +387,7 @@ DEFINE_IDTENTRY_DF(exc_double_fault)
 	}
 #endif
 
-	nmi_enter();
+	nmi_enter_notrace();
 	instrumentation_begin();
 	notify_die(DIE_TRAP, str, regs, error_code, X86_TRAP_DF, SIGSEGV);
 
@@ -632,12 +632,14 @@ DEFINE_IDTENTRY_RAW(exc_int3)
 		instrumentation_end();
 		idtentry_exit(regs);
 	} else {
-		nmi_enter();
+		nmi_enter_notrace();
 		instrumentation_begin();
+		ftrace_nmi_handler_enter();
 		if (!do_int3(regs))
 			die("int3", regs, 0);
+		ftrace_nmi_handler_exit();
 		instrumentation_end();
-		nmi_exit();
+		nmi_exit_notrace();
 	}
 }
 
@@ -849,7 +851,7 @@ out:
 static __always_inline void exc_debug_kernel(struct pt_regs *regs,
 					     unsigned long dr6)
 {
-	nmi_enter();
+	nmi_enter_notrace();
 	/*
 	 * The SDM says "The processor clears the BTF flag when it
 	 * generates a debug exception."  Clear TIF_BLOCKSTEP to keep
@@ -871,7 +873,7 @@ static __always_inline void exc_debug_kernel(struct pt_regs *regs,
 	if (dr6)
 		handle_debug(regs, dr6, false);
 
-	nmi_exit();
+	nmi_exit_notrace();
 }
 
 static __always_inline void exc_debug_user(struct pt_regs *regs,
