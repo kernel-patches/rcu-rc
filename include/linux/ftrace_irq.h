@@ -4,23 +4,30 @@
 
 #ifdef CONFIG_HWLAT_TRACER
 extern bool trace_hwlat_callback_enabled;
-extern void trace_hwlat_callback(bool enter);
-#endif
+extern void trace_hwlat_count_nmi(void);
+extern void trace_hwlat_timestamp(bool enter);
 
-static inline void ftrace_nmi_enter(void)
+static __always_inline void ftrace_count_nmi(void)
 {
-#ifdef CONFIG_HWLAT_TRACER
-	if (trace_hwlat_callback_enabled)
-		trace_hwlat_callback(true);
-#endif
+	if (unlikely(trace_hwlat_callback_enabled))
+		trace_hwlat_count_nmi();
 }
 
-static inline void ftrace_nmi_exit(void)
+static __always_inline void ftrace_nmi_handler_enter(void)
 {
-#ifdef CONFIG_HWLAT_TRACER
-	if (trace_hwlat_callback_enabled)
-		trace_hwlat_callback(false);
-#endif
+	if (unlikely(trace_hwlat_callback_enabled))
+		trace_hwlat_timestamp(true);
 }
+
+static __always_inline void ftrace_nmi_handler_exit(void)
+{
+	if (unlikely(trace_hwlat_callback_enabled))
+		trace_hwlat_timestamp(false);
+}
+#else /* CONFIG_HWLAT_TRACER */
+static inline void ftrace_count_nmi(void) {}
+static inline void ftrace_nmi_handler_enter(void) {}
+static inline void ftrace_nmi_handler_exit(void) {}
+#endif
 
 #endif /* _LINUX_FTRACE_IRQ_H */

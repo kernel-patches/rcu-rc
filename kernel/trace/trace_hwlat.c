@@ -132,21 +132,26 @@ static void trace_hwlat_sample(struct hwlat_sample *sample)
 }
 
 /*
+ * Count NMIs in nmi_enter(). Does not take timestamps
+ * because the timestamping callchain cannot be invoked
+ * from noinstr sections.
+ */
+noinstr void trace_hwlat_count_nmi(void)
+{
+	if (smp_processor_id() == nmi_cpu)
+		nmi_count++;
+}
+
+/*
  * Timestamping uses ktime_get_mono_fast(), the NMI safe access to
  * CLOCK_MONOTONIC.
  */
-void trace_hwlat_callback(bool enter)
+void trace_hwlat_timestamp(bool enter)
 {
-	if (smp_processor_id() != nmi_cpu)
-		return;
-
 	if (enter)
 		nmi_ts_start = ktime_get_mono_fast_ns();
 	else
 		nmi_total_ts += ktime_get_mono_fast_ns() - nmi_ts_start;
-
-	if (enter)
-		nmi_count++;
 }
 
 /**
