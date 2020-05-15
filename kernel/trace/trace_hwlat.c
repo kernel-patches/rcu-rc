@@ -131,29 +131,19 @@ static void trace_hwlat_sample(struct hwlat_sample *sample)
 		trace_buffer_unlock_commit_nostack(buffer, event);
 }
 
-/* Macros to encapsulate the time capturing infrastructure */
-#define time_type	u64
-#define time_get()	trace_clock_local()
-#define time_to_us(x)	div_u64(x, 1000)
-#define time_sub(a, b)	((a) - (b))
-#define init_time(a, b)	(a = b)
-#define time_u64(a)	a
-
+/*
+ * Timestamping uses ktime_get_mono_fast(), the NMI safe access to
+ * CLOCK_MONOTONIC.
+ */
 void trace_hwlat_callback(bool enter)
 {
 	if (smp_processor_id() != nmi_cpu)
 		return;
 
-	/*
-	 * Currently trace_clock_local() calls sched_clock() and the
-	 * generic version is not NMI safe.
-	 */
-	if (!IS_ENABLED(CONFIG_GENERIC_SCHED_CLOCK)) {
-		if (enter)
-			nmi_ts_start = time_get();
-		else
-			nmi_total_ts += time_get() - nmi_ts_start;
-	}
+	if (enter)
+		nmi_ts_start = ktime_get_mono_fast_ns();
+	else
+		nmi_total_ts += ktime_get_mono_fast_ns() - nmi_ts_start;
 
 	if (enter)
 		nmi_count++;
@@ -165,20 +155,22 @@ void trace_hwlat_callback(bool enter)
  * Used to repeatedly capture the CPU TSC (or similar), looking for potential
  * hardware-induced latency. Called with interrupts disabled and with
  * hwlat_data.lock held.
+ *
+ * Use ktime_get_mono_fast() here as well because it does not wait on the
+ * timekeeping seqcount like ktime_get_mono().
  */
 static int get_sample(void)
 {
 	struct trace_array *tr = hwlat_trace;
 	struct hwlat_sample s;
-	time_type start, t1, t2, last_t2;
+	u64 start, t1, t2, last_t2, thresh;
 	s64 diff, outer_diff, total, last_total = 0;
 	u64 sample = 0;
-	u64 thresh = tracing_thresh;
 	u64 outer_sample = 0;
 	int ret = -1;
 	unsigned int count = 0;
 
-	do_div(thresh, NSEC_PER_USEC); /* modifies interval value */
+	thresh = div_u64(tracing_thresh, NSEC_PER_USEC);
 
 	nmi_cpu = smp_processor_id();
 	nmi_total_ts = 0;
@@ -188,18 +180,20 @@ static int get_sample(void)
 
 	trace_hwlat_callback_enabled = true;
 
-	init_time(last_t2, 0);
-	start = time_get(); /* start timestamp */
+	/* start timestamp */
+	start = ktime_get_mono_fast_ns();
 	outer_diff = 0;
+	last_t2 = 0;
 
 	do {
 
-		t1 = time_get();	/* we'll look for a discontinuity */
-		t2 = time_get();
+		/* we'll look for a discontinuity */
+		t1 = ktime_get_mono_fast_ns();
+		t2 = ktime_get_mono_fast_ns();
 
-		if (time_u64(last_t2)) {
+		if (last_t2) {
 			/* Check the delta from outer loop (t2 to next t1) */
-			outer_diff = time_to_us(time_sub(t1, last_t2));
+			outer_diff = div_u64(t1 - last_t2, NSEC_PER_USEC);
 			/* This shouldn't happen */
 			if (outer_diff < 0) {
 				pr_err(BANNER "time running backwards\n");
@@ -210,7 +204,8 @@ static int get_sample(void)
 		}
 		last_t2 = t2;
 
-		total = time_to_us(time_sub(t2, start)); /* sample width */
+		/* sample width */
+		total = div_u64(t2 - start, NSEC_PER_USEC);
 
 		/* Check for possible overflows */
 		if (total < last_total) {
@@ -220,7 +215,7 @@ static int get_sample(void)
 		last_total = total;
 
 		/* This checks the inner loop (t1 to t2) */
-		diff = time_to_us(time_sub(t2, t1));     /* current diff */
+		diff = div_u64(t2 - t1, NSEC_PER_USEC);
 
 		if (diff > thresh || outer_diff > thresh) {
 			if (!count)
@@ -251,15 +246,11 @@ static int get_sample(void)
 
 		ret = 1;
 
-		/* We read in microseconds */
-		if (nmi_total_ts)
-			do_div(nmi_total_ts, NSEC_PER_USEC);
-
 		hwlat_data.count++;
 		s.seqnum = hwlat_data.count;
 		s.duration = sample;
 		s.outer_duration = outer_sample;
-		s.nmi_total_ts = nmi_total_ts;
+		s.nmi_total_ts = div_u64(nmi_total_ts, NSEC_PER_USEC);
 		s.nmi_count = nmi_count;
 		s.count = count;
 		trace_hwlat_sample(&s);
