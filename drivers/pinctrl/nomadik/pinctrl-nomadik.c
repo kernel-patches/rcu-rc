@@ -949,6 +949,7 @@ static void nmk_gpio_dbg_show_one(struct seq_file *s,
 	} else {
 		int irq = chip->to_irq(chip, offset);
 		const int pullidx = pull ? 1 : 0;
+		bool wake;
 		int val;
 		static const char * const pulls[] = {
 			"none        ",
@@ -970,6 +971,7 @@ static void nmk_gpio_dbg_show_one(struct seq_file *s,
 		 */
 		if (irq > 0 && irq_has_action(irq)) {
 			char *trigger;
+			bool wake;
 
 			if (nmk_chip->edge_rising & BIT(offset))
 				trigger = "edge-rising";
@@ -978,10 +980,10 @@ static void nmk_gpio_dbg_show_one(struct seq_file *s,
 			else
 				trigger = "edge-undefined";
 
+			wake = !!(nmk_chip->real_wake & BIT(offset));
+
 			seq_printf(s, " irq-%d %s%s",
-				   irq, trigger,
-				   irqd_is_wakeup_set(&desc->irq_data)
-				   ? " wakeup" : "");
+				   irq, trigger, wake ? " wakeup" : "");
 		}
 	}
 	clk_disable(nmk_chip->clk);
