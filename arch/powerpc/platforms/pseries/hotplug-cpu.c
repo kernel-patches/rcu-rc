@@ -64,11 +64,14 @@ static void pseries_cpu_offline_self(void)
 
 	local_irq_disable();
 	idle_task_exit();
+
+	/* Because the cpu is now offline, let rcu know that */
+	rcu_state_ofl_lock();
 	if (xive_enabled())
 		xive_teardown_cpu();
 	else
 		xics_teardown_cpu();
-
+	rcu_state_ofl_unlock();
 	unregister_slb_shadow(hwcpu);
 	rtas_stop_self();
 

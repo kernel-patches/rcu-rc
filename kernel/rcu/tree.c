@@ -4862,6 +4862,16 @@ void __init rcu_init(void)
 		(void)start_poll_synchronize_rcu_expedited();
 }
 
+void rcu_state_ofl_lock(void)
+{
+	arch_spin_lock(&rcu_state.ofl_lock);
+}
+
+void rcu_state_ofl_unlock(void)
+{
+	arch_spin_unlock(&rcu_state.ofl_lock);
+}
+
 #include "tree_stall.h"
 #include "tree_exp.h"
 #include "tree_nocb.h"
