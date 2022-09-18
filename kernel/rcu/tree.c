@@ -3910,10 +3910,11 @@ static void rcu_barrier_callback(struct rcu_head *rhp)
 /*
  * If needed, entrain an rcu_barrier() callback on rdp->cblist.
  */
-static void rcu_barrier_entrain(struct rcu_data *rdp)
+static void rcu_barrier_entrain(struct rcu_data *rdp, unsigned long flags)
 {
 	unsigned long gseq = READ_ONCE(rcu_state.barrier_sequence);
 	unsigned long lseq = READ_ONCE(rdp->barrier_seq_snap);
+	bool was_alldone;
 
 	lockdep_assert_held(&rcu_state.barrier_lock);
 	if (rcu_seq_state(lseq) || !rcu_seq_state(gseq) || rcu_seq_ctr(lseq) != rcu_seq_ctr(gseq))
@@ -3922,14 +3923,20 @@ static void rcu_barrier_entrain(struct rcu_data *rdp)
 	rdp->barrier_head.func = rcu_barrier_callback;
 	debug_rcu_head_queue(&rdp->barrier_head);
 	rcu_nocb_lock(rdp);
+	was_alldone = !rcu_segcblist_pend_cbs(&rdp->cblist);
 	WARN_ON_ONCE(!rcu_nocb_flush_bypass(rdp, NULL, jiffies));
+
 	if (rcu_segcblist_entrain(&rdp->cblist, &rdp->barrier_head)) {
 		atomic_inc(&rcu_state.barrier_cpu_count);
+		__call_rcu_nocb_wake(rdp, was_alldone, flags); /* unlocks */
 	} else {
+		/* rdp->cblist is empty so directly call the callback. */
+		atomic_inc(&rcu_state.barrier_cpu_count);
+		rcu_barrier_callback(&rdp->barrier_head);
 		debug_rcu_head_unqueue(&rdp->barrier_head);
 		rcu_barrier_trace(TPS("IRQNQ"), -1, rcu_state.barrier_sequence);
+		rcu_nocb_unlock(rdp);
 	}
-	rcu_nocb_unlock(rdp);
 	smp_store_release(&rdp->barrier_seq_snap, gseq);
 }
 
@@ -3938,15 +3945,16 @@ static void rcu_barrier_entrain(struct rcu_data *rdp)
  */
 static void rcu_barrier_handler(void *cpu_in)
 {
+	unsigned long flags;
 	uintptr_t cpu = (uintptr_t)cpu_in;
 	struct rcu_data *rdp = per_cpu_ptr(&rcu_data, cpu);
 
 	lockdep_assert_irqs_disabled();
 	WARN_ON_ONCE(cpu != rdp->cpu);
 	WARN_ON_ONCE(cpu != smp_processor_id());
-	raw_spin_lock(&rcu_state.barrier_lock);
-	rcu_barrier_entrain(rdp);
-	raw_spin_unlock(&rcu_state.barrier_lock);
+	raw_spin_lock_irqsave(&rcu_state.barrier_lock, flags);
+	rcu_barrier_entrain(rdp, flags);
+	raw_spin_unlock_irqrestore(&rcu_state.barrier_lock, flags);
 }
 
 /**
@@ -4013,7 +4021,7 @@ retry:
 			continue;
 		}
 		if (!rcu_rdp_cpu_online(rdp)) {
-			rcu_barrier_entrain(rdp);
+			rcu_barrier_entrain(rdp, flags);
 			WARN_ON_ONCE(READ_ONCE(rdp->barrier_seq_snap) != gseq);
 			raw_spin_unlock_irqrestore(&rcu_state.barrier_lock, flags);
 			rcu_barrier_trace(TPS("OfflineNoCBQ"), cpu, rcu_state.barrier_sequence);
@@ -4339,7 +4347,7 @@ void rcutree_migrate_callbacks(int cpu)
 
 	raw_spin_lock_irqsave(&rcu_state.barrier_lock, flags);
 	WARN_ON_ONCE(rcu_rdp_cpu_online(rdp));
-	rcu_barrier_entrain(rdp);
+	rcu_barrier_entrain(rdp, flags);
 	my_rdp = this_cpu_ptr(&rcu_data);
 	my_rnp = my_rdp->mynode;
 	rcu_nocb_lock(my_rdp); /* irqs already disabled. */
