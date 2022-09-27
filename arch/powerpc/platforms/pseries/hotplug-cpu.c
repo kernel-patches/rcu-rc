@@ -64,10 +64,15 @@ static void pseries_cpu_offline_self(void)
 
 	local_irq_disable();
 	idle_task_exit();
+	/* prevent lockdep code from traveling RCU protected list
+	 * when we are offline.
+	 */
+	lockdep_off();
 	if (xive_enabled())
 		xive_teardown_cpu();
 	else
 		xics_teardown_cpu();
+	lockdep_on();
 
 	unregister_slb_shadow(hwcpu);
 	rtas_stop_self();
