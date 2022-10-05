@@ -9,7 +9,7 @@ concurrency:
 
 jobs:
   llvm-toolchain:
-    runs-on: ubuntu-latest
+    runs-on: ARM64
     outputs:
       llvm: ${{ steps.llvm-toolchain-impl.outputs.version }}
     steps:
@@ -20,7 +20,7 @@ jobs:
         run: echo "::set-output name=version::llvm-${{ steps.llvm-version.outputs.version }}"
   set-matrix:
     needs: llvm-toolchain
-    runs-on: ubuntu-latest
+    runs-on: ARM64
     outputs:
       build-matrix: ${{ steps.set-matrix-impl.outputs.build_matrix }}
       test-matrix: ${{ steps.set-matrix-impl.outputs.test_matrix }}
