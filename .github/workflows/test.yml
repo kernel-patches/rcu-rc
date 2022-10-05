@@ -14,7 +14,7 @@ jobs:
       llvm: ${{ steps.llvm-toolchain-impl.outputs.version }}
     steps:
       - id: llvm-version
-        uses: libbpf/ci/get-llvm-version@master
+        uses: chantra/ci/get-llvm-version@aarch64_img
       - id: llvm-toolchain-impl
         shell: bash
         run: echo "::set-output name=version::llvm-${{ steps.llvm-version.outputs.version }}"
@@ -59,7 +59,7 @@ jobs:
       - uses: actions/checkout@v2
       - if: ${{ github.repository == 'kernel-patches/vmtest' }}
         name: Download bpf-next tree
-        uses: libbpf/ci/get-linux-source@master
+        uses: chantra/ci/get-linux-source@aarch64_img
         with:
           dest: '.kernel'
       - if: ${{ github.repository == 'kernel-patches/vmtest' }}
@@ -69,24 +69,24 @@ jobs:
           rm -rf .kernel/.git
           cp -rf .kernel/. .
           rm -rf .kernel
-      - uses: libbpf/ci/patch-kernel@master
+      - uses: chantra/ci/patch-kernel@aarch64_img
         with:
           patches-root: '${{ github.workspace }}/ci/diffs'
           repo-root: '${{ github.workspace }}'
       - name: Setup build environment
-        uses: libbpf/ci/setup-build-env@master
+        uses: chantra/ci/setup-build-env@aarch64_img
       - name: Build kernel image
-        uses: libbpf/ci/build-linux@master
+        uses: chantra/ci/build-linux@aarch64_img
         with:
           arch: ${{ matrix.arch }}
           toolchain: ${{ matrix.toolchain }}
       - name: Build selftests
-        uses: libbpf/ci/build-selftests@master
+        uses: chantra/ci/build-selftests@aarch64_img
         with:
           vmlinux_btf: ${{ github.workspace }}/vmlinux
           toolchain: ${{ matrix.toolchain }}
       - name: Build samples
-        uses: libbpf/ci/build-samples@master
+        uses: chantra/ci/build-samples@aarch64_img
         with:
           vmlinux_btf: ${{ github.workspace }}/vmlinux
           toolchain: ${{ matrix.toolchain }}
@@ -138,7 +138,7 @@ jobs:
       - name: Untar artifacts
         run: tar -xzf vmlinux-${{ matrix.arch }}-${{ matrix.toolchain }}.tar.gz
       - name: Prepare rootfs
-        uses: libbpf/ci/prepare-rootfs@master
+        uses: chantra/ci/prepare-rootfs@aarch64_img
         with:
           project-name: 'libbpf'
           arch: ${{ matrix.arch }}
@@ -147,7 +147,7 @@ jobs:
           image-output: '/tmp/root.img'
           test: ${{ matrix.test }}
       - name: Run selftests
-        uses: libbpf/ci/run-qemu@master
+        uses: chantra/ci/run-qemu@aarch64_img
         with:
           arch: ${{ matrix.arch}}
           img: '/tmp/root.img'
