@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# run_selftest.sh will run the tests within /${PROJECT_NAME}/selftests/bpf
+# If no specific test names are given, all test will be ran, otherwise, it will
+# run the test passed as parameters.
+# There is 2 ways to pass test names.
+# 1) command-line arguments to this script
+# 2) a comma-separated list of test names passed as `run_tests` boot parameters.
+# test names passed as any of those methods will be ran.
+
 set -euo pipefail
 
 source $(cd $(dirname $0) && pwd)/helpers.sh
@@ -7,6 +15,8 @@ source $(cd $(dirname $0) && pwd)/helpers.sh
 ARCH=$(uname -m)
 
 STATUS_FILE=/exitstatus
+
+declare -a TEST_NAMES_FROM_BOOT
 
 read_lists() {
 	(for path in "$@"; do
@@ -21,6 +31,17 @@ TEST_PROGS_ARGS=""
 # if [[ "$(nproc)" -gt 2 ]]; then
 #   TEST_PROGS_ARGS="-j"
 # fi
+
+read_tests_from_boot_parameters() {
+    foldable start read_test_from_boot "Reading tests from boot parameters"
+    # Check if test names were passed as boot parameter.
+    # We expect `run_tests` to be a comma-separated list of test names.
+    IFS=',' read -r -a TEST_NAMES_FROM_BOOT <<< \
+        "$(sed -n 's/.*run_tests=\([^ ]*\).*/\1/p' /proc/cmdline)"
+
+    echo "${#TEST_NAMES_FROM_BOOT[@]} tests: ${TEST_NAMES_FROM_BOOT[@]}"
+    foldable end read_test_from_boot
+}
 
 test_progs() {
   foldable start test_progs "Testing test_progs"
@@ -81,13 +102,21 @@ echo "ALLOWLIST: ${ALLOWLIST}"
 
 cd ${PROJECT_NAME}/selftests/bpf
 
-if [ $# -eq 0 ]; then
+# populate TEST_NAMES_FROM_BOOT
+read_tests_from_boot_parameters
+# Sort and only keep unique test names from both boot params and arguments
+readarray -t test_names < \
+    <(printf '%s\0' "${TEST_NAMES_FROM_BOOT[@]}" "$@" | sort -z -u | xargs -0n1)
+# if we don't have any test name provided to the script, we run all tests.
+if [ ${test_names[@]} -eq 0 ]; then
 	test_progs
 	test_progs_no_alu32
 	test_maps
 	test_verifier
 else
-	for test_name in "$@"; do
+	# else we run the tests passed as command-line arguments and through boot
+	# parameter.
+	for test_name in "${test_names[@]}" "$@"; do
 		"${test_name}"
 	done
 fi
