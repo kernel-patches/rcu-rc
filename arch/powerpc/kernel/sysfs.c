@@ -4,6 +4,7 @@
 #include <linux/smp.h>
 #include <linux/percpu.h>
 #include <linux/init.h>
+#include <linux/tick.h>
 #include <linux/sched.h>
 #include <linux/export.h>
 #include <linux/nodemask.h>
@@ -21,6 +22,7 @@
 #include <asm/firmware.h>
 #include <asm/idle.h>
 #include <asm/svm.h>
+#include "../../../kernel/time/tick-internal.h"
 
 #include "cacheinfo.h"
 #include "setup.h"
@@ -1151,7 +1153,11 @@ static int __init topology_init(void)
 		 * CPU.  For instance, the boot cpu might never be valid
 		 * for hotplugging.
 		 */
-		if (smp_ops && smp_ops->cpu_offline_self)
+		if (smp_ops && smp_ops->cpu_offline_self
+#ifdef CONFIG_NO_HZ_FULL
+		    && !(tick_nohz_full_running && tick_do_timer_cpu == cpu)
+#endif
+		    )
 			c->hotpluggable = 1;
 #endif
 
