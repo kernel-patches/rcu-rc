@@ -587,16 +587,18 @@ then
 		wait
 		if test -s $T/xz-todo-copy
 		then
+			# The trick here is that we need corresponding
+			# vmlinux files from corresponding scenarios.
 			echo Linking vmlinux.xz files to re-use scenarios `date` | tee -a "$tdir/log-xz" | tee -a $T/log
 			dirstash="`pwd`"
 			for i in `cat $T/xz-todo-copy`
 			do
 				cd $i
-				find "$i" -name vmlinux -print > $T/xz-todo-copy-vmlinux
+				find . -name vmlinux -print > $T/xz-todo-copy-vmlinux
 				for v in `cat $T/xz-todo-copy-vmlinux`
 				do
 					rm -f "$v"
-					cp -l "$i/$v".xz "`dirname "$v"`"
+					cp -l `cat $i/re-run`/"$i/$v".xz "`dirname "$v"`"
 				done
 				cd "$dirstash"
 			done
