@@ -1064,5 +1064,6 @@ rcu_head_after_call_rcu(struct rcu_head *rhp, rcu_callback_t f)
 /* kernel/ksysfs.c definitions */
 extern int rcu_expedited;
 extern int rcu_normal;
-
+void rcu_state_ofl_lock(void);
+void rcu_state_ofl_unlock(void);
 #endif /* __LINUX_RCUPDATE_H */
